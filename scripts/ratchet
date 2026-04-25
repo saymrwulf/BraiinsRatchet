@@ -13,6 +13,8 @@ Commands:
   once               Run one full monitor cycle, then print the human report.
   watch [hours]      Run repeated monitor cycles for N hours. Default: 6.
   report             Print the latest stored report without fetching new data.
+  experiments        Print the Karpathy-style experiment ledger.
+  retro SINCE [UNTIL] Write a retroactive report from stored snapshots.
   raw-cycle          Run one full monitor cycle and print raw JSON.
   test               Run the network-free test suite.
   explain            Print the operating procedure and interpretation guide.
@@ -22,6 +24,8 @@ Examples:
   ./scripts/ratchet once
   ./scripts/ratchet watch 6
   ./scripts/ratchet report
+  ./scripts/ratchet experiments
+  ./scripts/ratchet retro 2026-04-25T19:08:00+00:00 2026-04-25T21:05:00+00:00
 USAGE
 }
 
@@ -67,6 +71,7 @@ cmd_watch() {
   cycles=$((hours * 3600 / interval_seconds))
   echo "Running $cycles cycles over about $hours hour(s), one cycle every $interval_seconds seconds."
   echo "Stop early with Ctrl-C. This only reads public/OCEAN data and writes local snapshots."
+  echo "At completion it writes reports/EXPERIMENT_LOG.md and reports/run-*.md."
   echo
 
   run_python -m braiins_ratchet.cli watch --cycles "$cycles" --interval-seconds "$interval_seconds"
@@ -76,6 +81,28 @@ cmd_watch() {
 
 cmd_report() {
   run_python -m braiins_ratchet.cli report
+}
+
+cmd_experiments() {
+  run_python -m braiins_ratchet.cli experiments
+}
+
+cmd_retro() {
+  local since="${1:-}"
+  local until="${2:-}"
+  local run_id
+
+  if [[ -z "$since" ]]; then
+    echo "retro expects an ISO timestamp, e.g. ./scripts/ratchet retro 2026-04-25T19:08:00+00:00" >&2
+    exit 2
+  fi
+
+  run_id="retro-${since//[:+]/-}"
+  if [[ -n "$until" ]]; then
+    run_python -m braiins_ratchet.cli retro-report --since "$since" --until "$until" --run-id "$run_id" --write
+  else
+    run_python -m braiins_ratchet.cli retro-report --since "$since" --run-id "$run_id" --write
+  fi
 }
 
 cmd_test() {
@@ -96,6 +123,8 @@ main() {
     once) cmd_once "$@" ;;
     watch) cmd_watch "$@" ;;
     report) cmd_report "$@" ;;
+    experiments) cmd_experiments "$@" ;;
+    retro) cmd_retro "$@" ;;
     raw-cycle) cmd_raw_cycle "$@" ;;
     test) cmd_test "$@" ;;
     explain) cmd_explain "$@" ;;

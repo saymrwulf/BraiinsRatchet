@@ -91,6 +91,24 @@ Runs a bounded monitor loop. The interval floor is 30 seconds to avoid hammering
 PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli watch --cycles 12 --interval-seconds 300
 ```
 
+On normal completion, this writes a run report under `reports/` and appends `reports/EXPERIMENT_LOG.md`.
+
+## `experiments`
+
+Prints the master ratchet ledger.
+
+```bash
+PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli experiments
+```
+
+## `retro-report`
+
+Summarizes already stored snapshots from an earlier run. Use `--write` to create a report file and append the ledger.
+
+```bash
+PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli retro-report --since 2026-04-25T19:08:00+00:00 --until 2026-04-25T21:05:00+00:00 --run-id retro-second-watch --write
+```
+
 ## `import-market`
 
 Imports a manual market JSON snapshot. Use this when public Braiins endpoints are unavailable.

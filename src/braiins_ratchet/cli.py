@@ -8,6 +8,13 @@ import time
 
 from .braiins import BraiinsPublicClient, market_snapshot_from_json_file
 from .config import load_config
+from .experiments import (
+    EXPERIMENT_LOG,
+    finish_experiment,
+    start_experiment,
+    summarize_since,
+    write_retro_report,
+)
 from .monitor import run_cycle
 from .ocean import fetch_snapshot
 from .report import build_text_report
@@ -83,13 +90,36 @@ def cmd_watch(args: argparse.Namespace) -> int:
     if args.cycles < 1:
         raise SystemExit("cycles must be at least 1")
 
+    experiment = start_experiment(args.cycles, args.interval_seconds, args.hypothesis)
+    print(f"experiment: {experiment.run_id}")
+
     with connect() as conn:
-        for index in range(args.cycles):
-            result = run_cycle(conn, config)
-            print(f"cycle {index + 1}/{args.cycles}: {result.proposal.action} - {result.proposal.reason}")
-            if index + 1 < args.cycles:
-                time.sleep(args.interval_seconds)
-    return 0
+        status = "completed"
+        return_code = 0
+        try:
+            for index in range(args.cycles):
+                result = run_cycle(conn, config)
+                print(
+                    f"cycle {index + 1}/{args.cycles}: "
+                    f"{result.proposal.action} - {result.proposal.reason}"
+                )
+                if index + 1 < args.cycles:
+                    time.sleep(args.interval_seconds)
+        except KeyboardInterrupt:
+            status = "interrupted"
+            return_code = 130
+            print("interrupted: writing partial experiment report before exit")
+        report_path = finish_experiment(
+            conn,
+            experiment.run_id,
+            experiment.started_utc,
+            args.cycles,
+            args.interval_seconds,
+            args.hypothesis,
+            status=status,
+        )
+    print(f"experiment_report: {report_path}")
+    return return_code
 
 
 def cmd_evaluate(args: argparse.Namespace) -> int:
@@ -106,6 +136,52 @@ def cmd_report(args: argparse.Namespace) -> int:
     with connect() as conn:
         init_db(conn)
         print(build_text_report(conn, sample_limit=args.samples))
+    return 0
+
+
+def cmd_experiments(_: argparse.Namespace) -> int:
+    if not EXPERIMENT_LOG.exists():
+        print("No experiment log yet. Run ./scripts/ratchet watch 2.")
+        return 0
+    print(EXPERIMENT_LOG.read_text(encoding="utf-8"))
+    return 0
+
+
+def cmd_retro_report(args: argparse.Namespace) -> int:
+    with connect() as conn:
+        init_db(conn)
+        summary = summarize_since(
+            conn,
+            run_id=args.run_id,
+            started_utc=args.since,
+            ended_utc=args.until,
+            planned_cycles=0,
+            interval_seconds=0,
+            hypothesis=args.hypothesis,
+        )
+        report_path = (
+            write_retro_report(conn, args.run_id, args.since, args.until, args.hypothesis)
+            if args.write
+            else None
+        )
+    print(
+        "\n".join(
+            [
+                f"run_id: {summary.run_id}",
+                f"since: {summary.started_utc}",
+                f"until: {summary.ended_utc or 'n/a'}",
+                f"collected_samples: {summary.sample_count}",
+                f"first_sample_utc: {summary.first_sample_utc or 'n/a'}",
+                f"last_sample_utc: {summary.last_sample_utc or 'n/a'}",
+                f"action_counts: {summary.actions or {}}",
+                f"strategy_price_min_avg_max: {summary.min_price} / {summary.avg_price} / {summary.max_price}",
+                f"expected_net_min_avg_max_btc: {summary.min_expected_net} / {summary.avg_expected_net} / {summary.max_expected_net}",
+                f"latest_action: {summary.latest_action or 'n/a'}",
+                f"latest_reason: {summary.latest_reason or 'n/a'}",
+                f"report: {report_path or 'not written; add --write'}",
+            ]
+        )
+    )
     return 0
 
 
@@ -157,6 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
     watch.add_argument("--config")
     watch.add_argument("--cycles", type=int, default=3)
     watch.add_argument("--interval-seconds", type=int, default=300)
+    watch.add_argument("--hypothesis")
     watch.set_defaults(func=cmd_watch)
 
     evaluate = sub.add_parser("evaluate", help="emit monitor-only strategy recommendation")
@@ -166,6 +243,17 @@ def build_parser() -> argparse.ArgumentParser:
     report = sub.add_parser("report", help="print latest state and proposal")
     report.add_argument("--samples", type=int, default=50)
     report.set_defaults(func=cmd_report)
+
+    experiments = sub.add_parser("experiments", help="print the Karpathy-style experiment log")
+    experiments.set_defaults(func=cmd_experiments)
+
+    retro = sub.add_parser("retro-report", help="summarize stored snapshots since an ISO UTC timestamp")
+    retro.add_argument("--since", required=True)
+    retro.add_argument("--until")
+    retro.add_argument("--run-id", default="retro")
+    retro.add_argument("--hypothesis")
+    retro.add_argument("--write", action="store_true")
+    retro.set_defaults(func=cmd_retro_report)
 
     guardrails = sub.add_parser("guardrails", help="print active guardrails")
     guardrails.add_argument("--config")

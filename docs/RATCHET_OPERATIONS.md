@@ -24,6 +24,20 @@ For short monitor sessions:
 
 This runs for about six hours at 5-minute intervals. It is bounded by design.
 
+At the end of a normal watch, inspect the ratchet record:
+
+```bash
+./scripts/ratchet experiments
+```
+
+The ledger is the main artifact. It says what was tested, how long it ran, what actions the strategy would have considered, and what adaptation should be considered next.
+
+If a run already happened before automatic bookkeeping was available, reconstruct it from the stored SQLite snapshots:
+
+```bash
+./scripts/ratchet retro 2026-04-25T19:08:00+00:00 2026-04-25T21:05:00+00:00
+```
+
 ## Manual Market Snapshot
 
 If Braiins public endpoints are unavailable, use:

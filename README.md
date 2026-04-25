@@ -25,6 +25,20 @@ For a 6-hour monitoring session:
 ./scripts/ratchet watch 6
 ```
 
+Every completed watch is now treated as a ratchet experiment. It writes a run report under `reports/run-*.md` and appends the master ledger at `reports/EXPERIMENT_LOG.md`.
+
+To inspect the experiment ledger:
+
+```bash
+./scripts/ratchet experiments
+```
+
+To embed an already completed manual session from stored snapshots:
+
+```bash
+./scripts/ratchet retro 2026-04-25T19:08:00+00:00 2026-04-25T21:05:00+00:00
+```
+
 For the human operating guide:
 
 ```bash
@@ -74,6 +88,7 @@ The Braiins market report distinguishes visible top-of-book from executable dept
 - `docs/BRAIINS_PUBLIC_MARKET.md`: public market collector behavior.
 - `docs/RATCHET_OPERATIONS.md`: day-to-day monitor cycle.
 - `docs/CLI_REFERENCE.md`: command reference and test command.
+- `reports/EXPERIMENT_LOG.md`: master ratchet ledger with run-level hypotheses, outcomes, and adaptations.
 
 ## Tests
 

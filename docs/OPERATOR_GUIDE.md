@@ -103,6 +103,40 @@ During the watch:
 
 Stop early with `Ctrl-C`.
 
+When the watch completes normally, it writes:
+
+- `reports/EXPERIMENT_LOG.md`: the master ratchet ledger.
+- `reports/run-*.md`: the detailed report for this one run.
+
+Read the ledger with:
+
+```bash
+./scripts/ratchet experiments
+```
+
+## Ratchet Bookkeeping
+
+The terminal report answers "what is happening now?"
+
+The experiment ledger answers "what did we learn and what should change next?"
+
+Every completed `watch` records:
+
+- The hypothesis being tested.
+- Start time, end time, sampling interval, and collected sample count.
+- How many times the strategy said `observe`, `manual_canary`, or `manual_bid`.
+- The min/avg/max visible strategy price.
+- The min/avg/max expected net BTC.
+- A plain-English adaptation note.
+
+If you ran a session before automatic bookkeeping existed, embed it retroactively:
+
+```bash
+./scripts/ratchet retro 2026-04-25T19:08:00+00:00 2026-04-25T21:05:00+00:00
+```
+
+Use UTC timestamps from the raw report. This reconstructs the run from stored SQLite snapshots. It cannot recover operator intent that was not written down at the time, so the report marks the run as `retroactive`.
+
 ## When To Act
 
 Only consider a profit-seeking manual bid when all of these are true:
