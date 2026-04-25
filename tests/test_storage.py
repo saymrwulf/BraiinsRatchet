@@ -17,6 +17,11 @@ class StorageTests(unittest.TestCase):
                 best_price_btc_per_eh_day=Decimal("0.30"),
                 best_bid_btc_per_eh_day=Decimal("0.29"),
                 best_ask_btc_per_eh_day=Decimal("0.30"),
+                fillable_price_btc_per_eh_day=Decimal("0.32"),
+                fillable_target_ph=Decimal("10"),
+                fillable_available_ph=Decimal("14"),
+                suggested_bid_btc_per_eh_day=Decimal("0.33"),
+                suggested_overpay_btc_per_eh_day=Decimal("0.01"),
                 last_price_btc_per_eh_day=Decimal("0.31"),
                 total_hashrate_eh_s=Decimal("0.25"),
                 available_hashrate_eh_s=Decimal("0.21"),
@@ -31,6 +36,11 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(snapshot.best_price_btc_per_eh_day, Decimal("0.30"))
         self.assertEqual(snapshot.best_bid_btc_per_eh_day, Decimal("0.29"))
         self.assertEqual(snapshot.best_ask_btc_per_eh_day, Decimal("0.30"))
+        self.assertEqual(snapshot.fillable_price_btc_per_eh_day, Decimal("0.32"))
+        self.assertEqual(snapshot.fillable_target_ph, Decimal("10"))
+        self.assertEqual(snapshot.fillable_available_ph, Decimal("14"))
+        self.assertEqual(snapshot.suggested_bid_btc_per_eh_day, Decimal("0.33"))
+        self.assertEqual(snapshot.suggested_overpay_btc_per_eh_day, Decimal("0.01"))
         self.assertEqual(snapshot.last_price_btc_per_eh_day, Decimal("0.31"))
         self.assertEqual(snapshot.total_hashrate_eh_s, Decimal("0.25"))
         self.assertEqual(snapshot.available_hashrate_eh_s, Decimal("0.21"))

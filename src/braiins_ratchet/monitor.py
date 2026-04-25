@@ -48,7 +48,12 @@ def run_cycle(
         save_ocean_snapshot(conn, ocean)
 
     if collect_braiins:
-        fetcher = market_fetcher or BraiinsPublicClient().fetch_market_snapshot
+        fetcher = market_fetcher or (
+            lambda: BraiinsPublicClient().fetch_market_snapshot(
+                target_ph=config.strategy.shadow_target_ph,
+                overpay_btc_per_eh_day=config.strategy.shadow_overpay_btc_per_eh_day,
+            )
+        )
         market = fetcher()
         save_market_snapshot(conn, market)
 

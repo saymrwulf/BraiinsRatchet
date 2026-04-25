@@ -57,6 +57,8 @@ def _config() -> AppConfig:
             target_duration_minutes=180,
             target_spend_btc=Decimal("0.00010"),
             risk_lambda=Decimal("0.35"),
+            shadow_target_ph=Decimal("10"),
+            shadow_overpay_btc_per_eh_day=Decimal("0.01"),
         ),
     )
 

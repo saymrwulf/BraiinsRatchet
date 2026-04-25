@@ -12,6 +12,8 @@ The result is a recommendation only. `observe` means no action is recommended. `
 
 The report's sampled price min/avg/max uses public Braiins snapshots only. Manual imports are still stored and can drive evaluation, but they do not pollute live market summary statistics.
 
+The strategy price is depth-aware when orderbook depth is available: it prefers `suggested_bid_btc_per_eh_day` over raw best ask. This prevents top-of-book slivers or already-matched asks from looking cheaper than actually executable depth.
+
 ## Repeated Sampling
 
 For short monitor sessions:

@@ -50,8 +50,12 @@ def cmd_import_market(args: argparse.Namespace) -> int:
 
 
 def cmd_collect_braiins_public(args: argparse.Namespace) -> int:
+    config = load_config(Path(args.config) if args.config else None)
     client = BraiinsPublicClient(api_base=args.base_url.rstrip("/"))
-    snapshot = client.fetch_market_snapshot()
+    snapshot = client.fetch_market_snapshot(
+        target_ph=config.strategy.shadow_target_ph,
+        overpay_btc_per_eh_day=config.strategy.shadow_overpay_btc_per_eh_day,
+    )
     with connect() as conn:
         init_db(conn)
         save_market_snapshot(conn, snapshot)
@@ -139,6 +143,7 @@ def build_parser() -> argparse.ArgumentParser:
         "collect-braiins-public",
         help="collect one unauthenticated Braiins public market snapshot",
     )
+    braiins.add_argument("--config")
     braiins.add_argument("--base-url", default="https://hashpower.braiins.com/webapi")
     braiins.set_defaults(func=cmd_collect_braiins_public)
 

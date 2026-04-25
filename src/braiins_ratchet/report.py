@@ -39,10 +39,13 @@ def _market_lines(market: MarketSnapshot | None, stats: PriceStats) -> list[str]
         f"  status: {market.status or 'unknown'}",
         f"  best_bid_btc_per_eh_day: {_fmt(market.best_bid_btc_per_eh_day)}",
         f"  best_ask_btc_per_eh_day: {_fmt(market.best_ask_btc_per_eh_day)}",
+        f"  fillable_target_ph: {_fmt(market.fillable_target_ph)}",
+        f"  fillable_price_btc_per_eh_day: {_fmt(market.fillable_price_btc_per_eh_day)}",
+        f"  suggested_bid_btc_per_eh_day: {_fmt(market.suggested_bid_btc_per_eh_day)}",
         f"  last_price_btc_per_eh_day: {_fmt(market.last_price_btc_per_eh_day)}",
         f"  available_hashrate_eh_s: {_fmt(market.available_hashrate_eh_s)}",
-        f"  sampled_price_count: {stats.count}",
-        f"  sampled_price_min_avg_max: {_fmt(stats.min_price)} / {_fmt(stats.avg_price)} / {_fmt(stats.max_price)}",
+        f"  sampled_strategy_price_count: {stats.count}",
+        f"  sampled_strategy_price_min_avg_max: {_fmt(stats.min_price)} / {_fmt(stats.avg_price)} / {_fmt(stats.max_price)}",
     ]
 
 

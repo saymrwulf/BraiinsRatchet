@@ -37,6 +37,11 @@ def init_db(conn: sqlite3.Connection) -> None:
             best_price_btc_per_eh_day TEXT,
             best_bid_btc_per_eh_day TEXT,
             best_ask_btc_per_eh_day TEXT,
+            fillable_price_btc_per_eh_day TEXT,
+            fillable_target_ph TEXT,
+            fillable_available_ph TEXT,
+            suggested_bid_btc_per_eh_day TEXT,
+            suggested_overpay_btc_per_eh_day TEXT,
             last_price_btc_per_eh_day TEXT,
             total_hashrate_eh_s TEXT,
             available_hashrate_eh_s TEXT,
@@ -72,6 +77,11 @@ def _ensure_market_columns(conn: sqlite3.Connection) -> None:
     desired = {
         "best_bid_btc_per_eh_day": "TEXT",
         "best_ask_btc_per_eh_day": "TEXT",
+        "fillable_price_btc_per_eh_day": "TEXT",
+        "fillable_target_ph": "TEXT",
+        "fillable_available_ph": "TEXT",
+        "suggested_bid_btc_per_eh_day": "TEXT",
+        "suggested_overpay_btc_per_eh_day": "TEXT",
         "last_price_btc_per_eh_day": "TEXT",
         "total_hashrate_eh_s": "TEXT",
         "status": "TEXT",
@@ -107,10 +117,12 @@ def save_market_snapshot(conn: sqlite3.Connection, snapshot: MarketSnapshot) -> 
         """
         INSERT INTO market_snapshots (
             timestamp_utc, best_price_btc_per_eh_day, best_bid_btc_per_eh_day,
-            best_ask_btc_per_eh_day, last_price_btc_per_eh_day,
+            best_ask_btc_per_eh_day, fillable_price_btc_per_eh_day,
+            fillable_target_ph, fillable_available_ph, suggested_bid_btc_per_eh_day,
+            suggested_overpay_btc_per_eh_day, last_price_btc_per_eh_day,
             total_hashrate_eh_s, available_hashrate_eh_s, status, source
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             snapshot.timestamp_utc,
@@ -122,6 +134,21 @@ def save_market_snapshot(conn: sqlite3.Connection, snapshot: MarketSnapshot) -> 
             else None,
             str(snapshot.best_ask_btc_per_eh_day)
             if snapshot.best_ask_btc_per_eh_day is not None
+            else None,
+            str(snapshot.fillable_price_btc_per_eh_day)
+            if snapshot.fillable_price_btc_per_eh_day is not None
+            else None,
+            str(snapshot.fillable_target_ph)
+            if snapshot.fillable_target_ph is not None
+            else None,
+            str(snapshot.fillable_available_ph)
+            if snapshot.fillable_available_ph is not None
+            else None,
+            str(snapshot.suggested_bid_btc_per_eh_day)
+            if snapshot.suggested_bid_btc_per_eh_day is not None
+            else None,
+            str(snapshot.suggested_overpay_btc_per_eh_day)
+            if snapshot.suggested_overpay_btc_per_eh_day is not None
             else None,
             str(snapshot.last_price_btc_per_eh_day)
             if snapshot.last_price_btc_per_eh_day is not None
@@ -167,7 +194,9 @@ def latest_market_snapshot(conn: sqlite3.Connection) -> MarketSnapshot | None:
     row = conn.execute(
         """
         SELECT timestamp_utc, best_price_btc_per_eh_day, best_bid_btc_per_eh_day,
-               best_ask_btc_per_eh_day, last_price_btc_per_eh_day,
+               best_ask_btc_per_eh_day, fillable_price_btc_per_eh_day,
+               fillable_target_ph, fillable_available_ph, suggested_bid_btc_per_eh_day,
+               suggested_overpay_btc_per_eh_day, last_price_btc_per_eh_day,
                total_hashrate_eh_s, available_hashrate_eh_s, status, source
         FROM market_snapshots
         ORDER BY id DESC
@@ -183,11 +212,16 @@ def latest_market_snapshot(conn: sqlite3.Connection) -> MarketSnapshot | None:
         best_price_btc_per_eh_day=Decimal(row[1]) if row[1] else None,
         best_bid_btc_per_eh_day=Decimal(row[2]) if row[2] else None,
         best_ask_btc_per_eh_day=Decimal(row[3]) if row[3] else None,
-        last_price_btc_per_eh_day=Decimal(row[4]) if row[4] else None,
-        total_hashrate_eh_s=Decimal(row[5]) if row[5] else None,
-        available_hashrate_eh_s=Decimal(row[6]) if row[6] else None,
-        status=row[7],
-        source=row[8],
+        fillable_price_btc_per_eh_day=Decimal(row[4]) if row[4] else None,
+        fillable_target_ph=Decimal(row[5]) if row[5] else None,
+        fillable_available_ph=Decimal(row[6]) if row[6] else None,
+        suggested_bid_btc_per_eh_day=Decimal(row[7]) if row[7] else None,
+        suggested_overpay_btc_per_eh_day=Decimal(row[8]) if row[8] else None,
+        last_price_btc_per_eh_day=Decimal(row[9]) if row[9] else None,
+        total_hashrate_eh_s=Decimal(row[10]) if row[10] else None,
+        available_hashrate_eh_s=Decimal(row[11]) if row[11] else None,
+        status=row[12],
+        source=row[13],
     )
 
 

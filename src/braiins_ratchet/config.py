@@ -51,6 +51,8 @@ class StrategyConfig:
     target_duration_minutes: int
     target_spend_btc: Decimal
     risk_lambda: Decimal
+    shadow_target_ph: Decimal
+    shadow_overpay_btc_per_eh_day: Decimal
 
 
 @dataclass(frozen=True)
@@ -98,5 +100,9 @@ def load_config(path: Path | None = None) -> AppConfig:
             target_duration_minutes=int(strategy.get("target_duration_minutes", 180)),
             target_spend_btc=_decimal(strategy.get("target_spend_btc"), "0.0001"),
             risk_lambda=_decimal(strategy.get("risk_lambda"), "0.25"),
+            shadow_target_ph=_decimal(strategy.get("shadow_target_ph"), "10"),
+            shadow_overpay_btc_per_eh_day=_decimal(
+                strategy.get("shadow_overpay_btc_per_eh_day"), "0.01"
+            ),
         ),
     )

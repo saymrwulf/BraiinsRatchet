@@ -24,6 +24,11 @@ class MarketSnapshot:
     best_price_btc_per_eh_day: Decimal | None
     best_bid_btc_per_eh_day: Decimal | None = None
     best_ask_btc_per_eh_day: Decimal | None = None
+    fillable_price_btc_per_eh_day: Decimal | None = None
+    fillable_target_ph: Decimal | None = None
+    fillable_available_ph: Decimal | None = None
+    suggested_bid_btc_per_eh_day: Decimal | None = None
+    suggested_overpay_btc_per_eh_day: Decimal | None = None
     last_price_btc_per_eh_day: Decimal | None = None
     total_hashrate_eh_s: Decimal | None = None
     available_hashrate_eh_s: Decimal | None = None

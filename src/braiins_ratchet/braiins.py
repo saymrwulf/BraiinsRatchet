@@ -36,14 +36,24 @@ class BraiinsPublicClient:
         with urlopen(request, timeout=15) as response:
             return json.loads(response.read().decode("utf-8"))
 
-    def fetch_market_snapshot(self) -> MarketSnapshot:
+    def fetch_market_snapshot(
+        self,
+        *,
+        target_ph: Decimal = Decimal("10"),
+        overpay_btc_per_eh_day: Decimal = Decimal("0.01"),
+    ) -> MarketSnapshot:
         stats = self.get_json("/spot/stats")
         orderbook = self.get_json("/orderbook")
         if not isinstance(stats, dict):
             raise BraiinsSafetyError("/spot/stats did not return an object")
         if not isinstance(orderbook, dict):
             raise BraiinsSafetyError("/orderbook did not return an object")
-        return market_snapshot_from_public_api(stats, orderbook)
+        return market_snapshot_from_public_api(
+            stats,
+            orderbook,
+            target_ph=target_ph,
+            overpay_btc_per_eh_day=overpay_btc_per_eh_day,
+        )
 
 
 @dataclass(frozen=True)
@@ -90,6 +100,13 @@ def market_snapshot_from_json_file(path: str) -> MarketSnapshot:
         ),
         best_bid_btc_per_eh_day=_optional_decimal(raw.get("best_bid_btc_per_eh_day")),
         best_ask_btc_per_eh_day=_optional_decimal(raw.get("best_ask_btc_per_eh_day")),
+        fillable_price_btc_per_eh_day=_optional_decimal(raw.get("fillable_price_btc_per_eh_day")),
+        fillable_target_ph=_optional_decimal(raw.get("fillable_target_ph")),
+        fillable_available_ph=_optional_decimal(raw.get("fillable_available_ph")),
+        suggested_bid_btc_per_eh_day=_optional_decimal(raw.get("suggested_bid_btc_per_eh_day")),
+        suggested_overpay_btc_per_eh_day=_optional_decimal(
+            raw.get("suggested_overpay_btc_per_eh_day")
+        ),
         last_price_btc_per_eh_day=_optional_decimal(raw.get("last_price_btc_per_eh_day")),
         total_hashrate_eh_s=_optional_decimal(raw.get("total_hashrate_eh_s")),
         available_hashrate_eh_s=(
@@ -106,9 +123,12 @@ def market_snapshot_from_public_api(
     stats: dict[str, Any],
     orderbook: dict[str, Any],
     timestamp_utc: str | None = None,
+    target_ph: Decimal = Decimal("10"),
+    overpay_btc_per_eh_day: Decimal = Decimal("0.01"),
 ) -> MarketSnapshot:
     best_bid = _best_price_from_orders(orderbook.get("bids"), prefer="max")
     best_ask = _best_price_from_orders(orderbook.get("asks"), prefer="min")
+    depth = fillable_ask_for_target(orderbook.get("asks"), target_ph)
     last_price = _sat_to_btc(stats.get("last_avg_price_sat"))
     total_hashrate = _ph_to_eh(stats.get("hash_rate_available_10m_ph"))
     matched_hashrate = _ph_to_eh(stats.get("hash_rate_matched_10m_ph"))
@@ -117,19 +137,82 @@ def market_snapshot_from_public_api(
     if total_hashrate is not None and matched_hashrate is not None:
         available_hashrate = max(Decimal("0"), total_hashrate - matched_hashrate)
 
-    best_price = best_ask or last_price or best_bid
+    suggested_bid = (
+        depth.price_btc_per_eh_day + overpay_btc_per_eh_day
+        if depth.price_btc_per_eh_day is not None
+        else None
+    )
+    best_price = suggested_bid or best_ask or last_price or best_bid
 
     return MarketSnapshot(
         timestamp_utc=timestamp_utc or datetime.now(UTC).isoformat(timespec="seconds"),
         best_price_btc_per_eh_day=best_price,
         best_bid_btc_per_eh_day=best_bid,
         best_ask_btc_per_eh_day=best_ask,
+        fillable_price_btc_per_eh_day=depth.price_btc_per_eh_day,
+        fillable_target_ph=target_ph,
+        fillable_available_ph=depth.available_ph,
+        suggested_bid_btc_per_eh_day=suggested_bid,
+        suggested_overpay_btc_per_eh_day=overpay_btc_per_eh_day,
         last_price_btc_per_eh_day=last_price,
         total_hashrate_eh_s=total_hashrate,
         available_hashrate_eh_s=available_hashrate,
         status=str(stats["status"]) if stats.get("status") is not None else None,
         source="braiins-public",
     )
+
+
+@dataclass(frozen=True)
+class FillableDepth:
+    price_btc_per_eh_day: Decimal | None
+    available_ph: Decimal
+
+
+def fillable_ask_for_target(asks: object, target_ph: Decimal) -> FillableDepth:
+    if not isinstance(asks, list) or target_ph <= 0:
+        return FillableDepth(price_btc_per_eh_day=None, available_ph=Decimal("0"))
+
+    levels: list[tuple[Decimal, Decimal]] = []
+    for ask in asks:
+        if not isinstance(ask, dict):
+            continue
+        price = _sat_to_btc(ask.get("price_sat"))
+        available = _available_ask_ph(ask)
+        if price is not None and available > 0:
+            levels.append((price, available))
+
+    levels.sort(key=lambda item: item[0])
+    cumulative = Decimal("0")
+    for price, available in levels:
+        cumulative += available
+        if cumulative >= target_ph:
+            return FillableDepth(price_btc_per_eh_day=price, available_ph=cumulative)
+
+    return FillableDepth(price_btc_per_eh_day=None, available_ph=cumulative)
+
+
+def _available_ask_ph(ask: dict[str, Any]) -> Decimal:
+    for key in ("hash_rate_available_ph", "available_hashrate_ph", "available_ph"):
+        value = _optional_decimal(ask.get(key))
+        if value is not None:
+            return max(Decimal("0"), value)
+
+    limit = _optional_decimal(
+        ask.get("hash_rate_limit_ph")
+        or ask.get("limit_ph")
+        or ask.get("hashRateAvailable")
+        or ask.get("amount")
+    )
+    used = _optional_decimal(
+        ask.get("hash_rate_matched_ph")
+        or ask.get("used_ph")
+        or ask.get("hashRateMatched")
+        or ask.get("total")
+    )
+    if limit is not None:
+        return max(Decimal("0"), limit - (used or Decimal("0")))
+
+    return Decimal("0")
 
 
 def _best_price_from_orders(orders: object, prefer: str) -> Decimal | None:
