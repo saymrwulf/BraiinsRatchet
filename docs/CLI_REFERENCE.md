@@ -4,10 +4,10 @@ Most users should use the wrapper:
 
 ```bash
 ./scripts/ratchet setup
-./scripts/ratchet once
-./scripts/ratchet watch 6
-./scripts/ratchet report
+./scripts/ratchet
 ```
+
+`./scripts/ratchet` defaults to `./scripts/ratchet next`, the operator cockpit. It tells you exactly what to do next.
 
 Use `./scripts/ratchet raw-cycle` only when debugging the machine-readable cycle output.
 
@@ -19,6 +19,14 @@ Use the local virtual environment:
 
 ```bash
 PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli <command>
+```
+
+## `next`
+
+Prints the cockpit: current state, exact next operator action, interpretation, and safe commands.
+
+```bash
+PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli next
 ```
 
 ## `init-db`

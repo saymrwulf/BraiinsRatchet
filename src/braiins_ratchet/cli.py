@@ -15,6 +15,7 @@ from .experiments import (
     summarize_since,
     write_retro_report,
 )
+from .guidance import build_operator_cockpit
 from .monitor import run_cycle
 from .ocean import fetch_snapshot
 from .report import build_text_report
@@ -139,6 +140,13 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_next(_: argparse.Namespace) -> int:
+    with connect() as conn:
+        init_db(conn)
+        print(build_operator_cockpit(conn))
+    return 0
+
+
 def cmd_experiments(_: argparse.Namespace) -> int:
     if not EXPERIMENT_LOG.exists():
         print("No experiment log yet. Run ./scripts/ratchet watch 2.")
@@ -243,6 +251,9 @@ def build_parser() -> argparse.ArgumentParser:
     report = sub.add_parser("report", help="print latest state and proposal")
     report.add_argument("--samples", type=int, default=50)
     report.set_defaults(func=cmd_report)
+
+    next_step = sub.add_parser("next", help="print exactly what the operator should do next")
+    next_step.set_defaults(func=cmd_next)
 
     experiments = sub.add_parser("experiments", help="print the Karpathy-style experiment log")
     experiments.set_defaults(func=cmd_experiments)

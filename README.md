@@ -16,8 +16,10 @@ The first implementation is deliberately conservative:
 
 ```bash
 ./scripts/ratchet setup
-./scripts/ratchet once
+./scripts/ratchet
 ```
+
+`./scripts/ratchet` is the cockpit. It tells you exactly what to do next.
 
 For a 6-hour monitoring session:
 
@@ -84,6 +86,7 @@ The Braiins market report distinguishes visible top-of-book from executable dept
 ## Documentation
 
 - `PROGRAM.md`: research charter and ratchet rules.
+- `START_HERE.md`: no-prior-knowledge operating instructions.
 - `SECURITY.md`: token, computer, and trading safety guardrails.
 - `docs/BRAIINS_PUBLIC_MARKET.md`: public market collector behavior.
 - `docs/RATCHET_OPERATIONS.md`: day-to-day monitor cycle.

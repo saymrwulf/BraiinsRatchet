@@ -5,6 +5,14 @@
 Run these commands from the repository root:
 
 ```bash
+./scripts/ratchet
+```
+
+This prints the cockpit and tells you exactly what to do next.
+
+If the cockpit tells you to collect one fresh sample, run:
+
+```bash
 ./scripts/ratchet once
 ```
 

@@ -25,6 +25,14 @@ What this does:
 - Does not install packages.
 - Does not touch anything outside the repo.
 
+After setup, use the cockpit:
+
+```bash
+./scripts/ratchet
+```
+
+The cockpit tells you exactly what to do next. If you are unsure, run it again.
+
 ## First Live Check
 
 Run:
@@ -102,6 +110,8 @@ During the watch:
 - If it prints `manual_bid`, stop and run `./scripts/ratchet report` before deciding manually.
 
 Stop early with `Ctrl-C`.
+
+If you stop early, the tool writes a partial experiment report and then prints the cockpit.
 
 When the watch completes normally, it writes:
 
