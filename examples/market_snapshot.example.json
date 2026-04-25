@@ -1,6 +1,11 @@
 {
   "timestamp_utc": "2026-04-25T12:00:00+00:00",
   "best_price_btc_per_eh_day": "0.30",
+  "best_bid_btc_per_eh_day": "0.29",
+  "best_ask_btc_per_eh_day": "0.30",
+  "last_price_btc_per_eh_day": "0.31",
+  "total_hashrate_eh_s": "0.25",
   "available_hashrate_eh_s": "0.10",
+  "status": "SPOT_INSTRUMENT_STATUS_ACTIVE",
   "source": "manual-example"
 }

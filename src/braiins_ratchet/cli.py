@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import sys
 
-from .braiins import market_snapshot_from_json_file
+from .braiins import BraiinsPublicClient, market_snapshot_from_json_file
 from .config import load_config
 from .ocean import fetch_snapshot
 from .storage import (
@@ -39,6 +39,16 @@ def cmd_collect_ocean(args: argparse.Namespace) -> int:
 
 def cmd_import_market(args: argparse.Namespace) -> int:
     snapshot = market_snapshot_from_json_file(args.path)
+    with connect() as conn:
+        init_db(conn)
+        save_market_snapshot(conn, snapshot)
+    print(json.dumps(snapshot.__dict__, default=str, indent=2))
+    return 0
+
+
+def cmd_collect_braiins_public(args: argparse.Namespace) -> int:
+    client = BraiinsPublicClient(api_base=args.base_url.rstrip("/"))
+    snapshot = client.fetch_market_snapshot()
     with connect() as conn:
         init_db(conn)
         save_market_snapshot(conn, snapshot)
@@ -85,6 +95,13 @@ def build_parser() -> argparse.ArgumentParser:
     market = sub.add_parser("import-market", help="import manual Braiins market JSON snapshot")
     market.add_argument("path")
     market.set_defaults(func=cmd_import_market)
+
+    braiins = sub.add_parser(
+        "collect-braiins-public",
+        help="collect one unauthenticated Braiins public market snapshot",
+    )
+    braiins.add_argument("--base-url", default="https://hashpower.braiins.com/webapi")
+    braiins.set_defaults(func=cmd_collect_braiins_public)
 
     evaluate = sub.add_parser("evaluate", help="emit monitor-only strategy recommendation")
     evaluate.add_argument("--config")

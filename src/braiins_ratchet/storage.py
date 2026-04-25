@@ -35,7 +35,12 @@ def init_db(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY,
             timestamp_utc TEXT NOT NULL,
             best_price_btc_per_eh_day TEXT,
+            best_bid_btc_per_eh_day TEXT,
+            best_ask_btc_per_eh_day TEXT,
+            last_price_btc_per_eh_day TEXT,
+            total_hashrate_eh_s TEXT,
             available_hashrate_eh_s TEXT,
+            status TEXT,
             source TEXT NOT NULL
         );
 
@@ -55,7 +60,25 @@ def init_db(conn: sqlite3.Connection) -> None:
         );
         """
     )
+    _ensure_market_columns(conn)
     conn.commit()
+
+
+def _ensure_market_columns(conn: sqlite3.Connection) -> None:
+    existing = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(market_snapshots)").fetchall()
+    }
+    desired = {
+        "best_bid_btc_per_eh_day": "TEXT",
+        "best_ask_btc_per_eh_day": "TEXT",
+        "last_price_btc_per_eh_day": "TEXT",
+        "total_hashrate_eh_s": "TEXT",
+        "status": "TEXT",
+    }
+    for column, column_type in desired.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE market_snapshots ADD COLUMN {column} {column_type}")
 
 
 def save_ocean_snapshot(conn: sqlite3.Connection, snapshot: OceanSnapshot) -> None:
@@ -83,18 +106,33 @@ def save_market_snapshot(conn: sqlite3.Connection, snapshot: MarketSnapshot) -> 
     conn.execute(
         """
         INSERT INTO market_snapshots (
-            timestamp_utc, best_price_btc_per_eh_day, available_hashrate_eh_s, source
+            timestamp_utc, best_price_btc_per_eh_day, best_bid_btc_per_eh_day,
+            best_ask_btc_per_eh_day, last_price_btc_per_eh_day,
+            total_hashrate_eh_s, available_hashrate_eh_s, status, source
         )
-        VALUES (?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             snapshot.timestamp_utc,
             str(snapshot.best_price_btc_per_eh_day)
             if snapshot.best_price_btc_per_eh_day is not None
             else None,
+            str(snapshot.best_bid_btc_per_eh_day)
+            if snapshot.best_bid_btc_per_eh_day is not None
+            else None,
+            str(snapshot.best_ask_btc_per_eh_day)
+            if snapshot.best_ask_btc_per_eh_day is not None
+            else None,
+            str(snapshot.last_price_btc_per_eh_day)
+            if snapshot.last_price_btc_per_eh_day is not None
+            else None,
+            str(snapshot.total_hashrate_eh_s)
+            if snapshot.total_hashrate_eh_s is not None
+            else None,
             str(snapshot.available_hashrate_eh_s)
             if snapshot.available_hashrate_eh_s is not None
             else None,
+            snapshot.status,
             snapshot.source,
         ),
     )
@@ -128,7 +166,9 @@ def latest_ocean_snapshot(conn: sqlite3.Connection) -> OceanSnapshot | None:
 def latest_market_snapshot(conn: sqlite3.Connection) -> MarketSnapshot | None:
     row = conn.execute(
         """
-        SELECT timestamp_utc, best_price_btc_per_eh_day, available_hashrate_eh_s, source
+        SELECT timestamp_utc, best_price_btc_per_eh_day, best_bid_btc_per_eh_day,
+               best_ask_btc_per_eh_day, last_price_btc_per_eh_day,
+               total_hashrate_eh_s, available_hashrate_eh_s, status, source
         FROM market_snapshots
         ORDER BY id DESC
         LIMIT 1
@@ -141,8 +181,13 @@ def latest_market_snapshot(conn: sqlite3.Connection) -> MarketSnapshot | None:
     return MarketSnapshot(
         timestamp_utc=row[0],
         best_price_btc_per_eh_day=Decimal(row[1]) if row[1] else None,
-        available_hashrate_eh_s=Decimal(row[2]) if row[2] else None,
-        source=row[3],
+        best_bid_btc_per_eh_day=Decimal(row[2]) if row[2] else None,
+        best_ask_btc_per_eh_day=Decimal(row[3]) if row[3] else None,
+        last_price_btc_per_eh_day=Decimal(row[4]) if row[4] else None,
+        total_hashrate_eh_s=Decimal(row[5]) if row[5] else None,
+        available_hashrate_eh_s=Decimal(row[6]) if row[6] else None,
+        status=row[7],
+        source=row[8],
     )
 
 

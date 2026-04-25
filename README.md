@@ -17,6 +17,7 @@ The first implementation is deliberately conservative:
 python3 -m venv .venv
 ./.venv/bin/python -m braiins_ratchet.cli init-db
 ./.venv/bin/python -m braiins_ratchet.cli collect-ocean
+./.venv/bin/python -m braiins_ratchet.cli collect-braiins-public
 ./.venv/bin/python -m braiins_ratchet.cli evaluate
 ```
 
@@ -43,6 +44,28 @@ The JSON shape is:
   "source": "manual"
 }
 ```
+
+## Public Braiins Market Data
+
+The collector first uses unauthenticated public web endpoints from `hashpower.braiins.com`; no token is needed for live price action. See `docs/BRAIINS_PUBLIC_MARKET.md`.
+
+Watcher-only tokens are only relevant if we later need account-specific read-only data such as your private balance, historical fills, or order status. Owner tokens remain out of scope.
+
+## Documentation
+
+- `PROGRAM.md`: research charter and ratchet rules.
+- `SECURITY.md`: token, computer, and trading safety guardrails.
+- `docs/BRAIINS_PUBLIC_MARKET.md`: public market collector behavior.
+- `docs/RATCHET_OPERATIONS.md`: day-to-day monitor cycle.
+- `docs/CLI_REFERENCE.md`: command reference and test command.
+
+## Tests
+
+```bash
+PYTHONPATH=src ./.venv/bin/python -m unittest discover -s tests
+```
+
+The tests are network-free and use fixtures for public Braiins parsing. Live collectors are intentionally separate operational checks.
 
 ## Guardrail Model
 

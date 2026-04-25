@@ -22,7 +22,12 @@ class OceanSnapshot:
 class MarketSnapshot:
     timestamp_utc: str
     best_price_btc_per_eh_day: Decimal | None
+    best_bid_btc_per_eh_day: Decimal | None = None
+    best_ask_btc_per_eh_day: Decimal | None = None
+    last_price_btc_per_eh_day: Decimal | None = None
+    total_hashrate_eh_s: Decimal | None = None
     available_hashrate_eh_s: Decimal | None = None
+    status: str | None = None
     source: str = "manual"
 
 
