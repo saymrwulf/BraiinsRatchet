@@ -5,8 +5,7 @@
 Run these commands from the repository root:
 
 ```bash
-PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli cycle
-PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli report
+./scripts/ratchet once
 ```
 
 The result is a recommendation only. `manual_bid` means the strategy thinks a manually placed bid clears the configured guardrails. `observe` means no action is recommended.
@@ -18,10 +17,10 @@ The report's sampled price min/avg/max uses public Braiins snapshots only. Manua
 For short monitor sessions:
 
 ```bash
-PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli watch --cycles 12 --interval-seconds 300
+./scripts/ratchet watch 6
 ```
 
-This runs for about one hour at 5-minute intervals. It is bounded by design; use your shell or system scheduler if you want recurring sessions.
+This runs for about six hours at 5-minute intervals. It is bounded by design.
 
 ## Manual Market Snapshot
 

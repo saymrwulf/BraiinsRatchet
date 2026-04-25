@@ -1,6 +1,19 @@
 # CLI Reference
 
-All commands should be run from the repository root.
+Most users should use the wrapper:
+
+```bash
+./scripts/ratchet setup
+./scripts/ratchet once
+./scripts/ratchet watch 6
+./scripts/ratchet report
+```
+
+Use `./scripts/ratchet raw-cycle` only when debugging the machine-readable cycle output.
+
+The raw Python CLI is documented below for debugging and development.
+
+All raw commands should be run from the repository root.
 
 Use the local virtual environment:
 

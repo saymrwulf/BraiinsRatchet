@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+
+usage() {
+  cat <<'USAGE'
+Braiins Ratchet
+
+Commands:
+  setup              Create the local .venv and initialize the local database.
+  once               Run one full monitor cycle, then print the human report.
+  watch [hours]      Run repeated monitor cycles for N hours. Default: 6.
+  report             Print the latest stored report without fetching new data.
+  raw-cycle          Run one full monitor cycle and print raw JSON.
+  test               Run the network-free test suite.
+  explain            Print the operating procedure and interpretation guide.
+
+Examples:
+  ./scripts/ratchet setup
+  ./scripts/ratchet once
+  ./scripts/ratchet watch 6
+  ./scripts/ratchet report
+USAGE
+}
+
+ensure_venv() {
+  if [[ ! -x "$PYTHON_BIN" ]]; then
+    echo "Creating local virtual environment at .venv ..."
+    python3 -m venv "$ROOT_DIR/.venv"
+  fi
+}
+
+run_python() {
+  ensure_venv
+  PYTHONPATH="$ROOT_DIR/src" "$PYTHON_BIN" "$@"
+}
+
+cmd_setup() {
+  ensure_venv
+  run_python -m braiins_ratchet.cli init-db
+  echo
+  echo "Setup complete. Next: ./scripts/ratchet once"
+}
+
+cmd_once() {
+  run_python -m braiins_ratchet.cli cycle >/dev/null
+  echo
+  run_python -m braiins_ratchet.cli report
+}
+
+cmd_raw_cycle() {
+  run_python -m braiins_ratchet.cli cycle
+}
+
+cmd_watch() {
+  local hours="${1:-6}"
+  local interval_seconds=300
+  local cycles
+
+  if ! [[ "$hours" =~ ^[0-9]+$ ]] || [[ "$hours" -lt 1 ]]; then
+    echo "watch expects whole hours, e.g. ./scripts/ratchet watch 6" >&2
+    exit 2
+  fi
+
+  cycles=$((hours * 3600 / interval_seconds))
+  echo "Running $cycles cycles over about $hours hour(s), one cycle every $interval_seconds seconds."
+  echo "Stop early with Ctrl-C. This only reads public/OCEAN data and writes local snapshots."
+  echo
+
+  run_python -m braiins_ratchet.cli watch --cycles "$cycles" --interval-seconds "$interval_seconds"
+  echo
+  run_python -m braiins_ratchet.cli report
+}
+
+cmd_report() {
+  run_python -m braiins_ratchet.cli report
+}
+
+cmd_test() {
+  run_python -m unittest discover -s "$ROOT_DIR/tests"
+}
+
+cmd_explain() {
+  cat "$ROOT_DIR/docs/OPERATOR_GUIDE.md"
+}
+
+main() {
+  cd "$ROOT_DIR"
+  local command="${1:-help}"
+  shift || true
+
+  case "$command" in
+    setup) cmd_setup "$@" ;;
+    once) cmd_once "$@" ;;
+    watch) cmd_watch "$@" ;;
+    report) cmd_report "$@" ;;
+    raw-cycle) cmd_raw_cycle "$@" ;;
+    test) cmd_test "$@" ;;
+    explain) cmd_explain "$@" ;;
+    help|-h|--help) usage ;;
+    *)
+      echo "Unknown command: $command" >&2
+      echo >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

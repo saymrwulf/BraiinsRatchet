@@ -14,22 +14,20 @@ The first implementation is deliberately conservative:
 ## Quick Start
 
 ```bash
-python3 -m venv .venv
-./.venv/bin/python -m braiins_ratchet.cli init-db
-./.venv/bin/python -m braiins_ratchet.cli cycle
-./.venv/bin/python -m braiins_ratchet.cli report
+./scripts/ratchet setup
+./scripts/ratchet once
 ```
 
-Set `PYTHONPATH=src` if running without installation:
+For a 6-hour monitoring session:
 
 ```bash
-PYTHONPATH=src python3 -m braiins_ratchet.cli evaluate
+./scripts/ratchet watch 6
 ```
 
-Run a bounded monitor loop:
+For the human operating guide:
 
 ```bash
-PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli watch --cycles 12 --interval-seconds 300
+./scripts/ratchet explain
 ```
 
 Import a manual Braiins market snapshot:
