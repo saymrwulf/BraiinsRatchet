@@ -32,6 +32,14 @@ class MarketSnapshot:
 
 
 @dataclass(frozen=True)
+class PriceStats:
+    count: int
+    min_price: Decimal | None
+    avg_price: Decimal | None
+    max_price: Decimal | None
+
+
+@dataclass(frozen=True)
 class CandidateOrder:
     price_btc_per_eh_day: Decimal
     spend_btc: Decimal

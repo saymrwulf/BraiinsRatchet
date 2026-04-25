@@ -4,7 +4,7 @@ from pathlib import Path
 import sqlite3
 
 from .config import REPO_ROOT
-from .models import MarketSnapshot, OceanSnapshot, StrategyProposal
+from .models import CandidateOrder, MarketSnapshot, OceanSnapshot, PriceStats, StrategyProposal
 
 
 DATA_DIR = REPO_ROOT / "data"
@@ -188,6 +188,68 @@ def latest_market_snapshot(conn: sqlite3.Connection) -> MarketSnapshot | None:
         available_hashrate_eh_s=Decimal(row[6]) if row[6] else None,
         status=row[7],
         source=row[8],
+    )
+
+
+def latest_proposal(conn: sqlite3.Connection) -> StrategyProposal | None:
+    row = conn.execute(
+        """
+        SELECT action, reason, price_btc_per_eh_day, spend_btc, duration_minutes,
+               breakeven_btc_per_eh_day, expected_reward_btc, expected_net_btc,
+               score_btc, maturity_note
+        FROM proposals
+        ORDER BY id DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if not row:
+        return None
+    from decimal import Decimal
+
+    order = None
+    if row[2] is not None and row[3] is not None and row[4] is not None:
+        order = CandidateOrder(
+            price_btc_per_eh_day=Decimal(row[2]),
+            spend_btc=Decimal(row[3]),
+            duration_minutes=int(row[4]),
+        )
+
+    return StrategyProposal(
+        action=row[0],
+        reason=row[1],
+        order=order,
+        breakeven_btc_per_eh_day=Decimal(row[5]) if row[5] else None,
+        expected_reward_btc=Decimal(row[6]),
+        expected_net_btc=Decimal(row[7]),
+        score_btc=Decimal(row[8]),
+        maturity_note=row[9],
+    )
+
+
+def market_price_stats(conn: sqlite3.Connection, limit: int, source: str | None = None):
+    from decimal import Decimal
+
+    source_filter = "AND source = ?" if source else ""
+    params: tuple[object, ...] = (source, limit) if source else (limit,)
+    rows = conn.execute(
+        f"""
+        SELECT best_price_btc_per_eh_day
+        FROM market_snapshots
+        WHERE best_price_btc_per_eh_day IS NOT NULL
+        {source_filter}
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        params,
+    ).fetchall()
+    prices = [Decimal(row[0]) for row in rows]
+    if not prices:
+        return PriceStats(count=0, min_price=None, avg_price=None, max_price=None)
+    return PriceStats(
+        count=len(prices),
+        min_price=min(prices),
+        avg_price=sum(prices) / Decimal(len(prices)),
+        max_price=max(prices),
     )
 
 

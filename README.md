@@ -16,15 +16,20 @@ The first implementation is deliberately conservative:
 ```bash
 python3 -m venv .venv
 ./.venv/bin/python -m braiins_ratchet.cli init-db
-./.venv/bin/python -m braiins_ratchet.cli collect-ocean
-./.venv/bin/python -m braiins_ratchet.cli collect-braiins-public
-./.venv/bin/python -m braiins_ratchet.cli evaluate
+./.venv/bin/python -m braiins_ratchet.cli cycle
+./.venv/bin/python -m braiins_ratchet.cli report
 ```
 
 Set `PYTHONPATH=src` if running without installation:
 
 ```bash
 PYTHONPATH=src python3 -m braiins_ratchet.cli evaluate
+```
+
+Run a bounded monitor loop:
+
+```bash
+PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli watch --cycles 12 --interval-seconds 300
 ```
 
 Import a manual Braiins market snapshot:

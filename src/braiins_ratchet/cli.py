@@ -4,10 +4,13 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import time
 
 from .braiins import BraiinsPublicClient, market_snapshot_from_json_file
 from .config import load_config
+from .monitor import run_cycle
 from .ocean import fetch_snapshot
+from .report import build_text_report
 from .storage import (
     connect,
     init_db,
@@ -56,6 +59,35 @@ def cmd_collect_braiins_public(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_cycle(args: argparse.Namespace) -> int:
+    config = load_config(Path(args.config) if args.config else None)
+    with connect() as conn:
+        result = run_cycle(
+            conn,
+            config,
+            collect_ocean=not args.skip_ocean,
+            collect_braiins=not args.skip_braiins,
+        )
+    print(_proposal_json(result))
+    return 0
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    config = load_config(Path(args.config) if args.config else None)
+    if args.interval_seconds < 30:
+        raise SystemExit("interval must be at least 30 seconds")
+    if args.cycles < 1:
+        raise SystemExit("cycles must be at least 1")
+
+    with connect() as conn:
+        for index in range(args.cycles):
+            result = run_cycle(conn, config)
+            print(f"cycle {index + 1}/{args.cycles}: {result.proposal.action} - {result.proposal.reason}")
+            if index + 1 < args.cycles:
+                time.sleep(args.interval_seconds)
+    return 0
+
+
 def cmd_evaluate(args: argparse.Namespace) -> int:
     config = load_config(Path(args.config) if args.config else None)
     with connect() as conn:
@@ -63,6 +95,13 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         proposal = propose(config, latest_ocean_snapshot(conn), latest_market_snapshot(conn))
         save_proposal(conn, proposal)
     print(_proposal_json(proposal))
+    return 0
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    with connect() as conn:
+        init_db(conn)
+        print(build_text_report(conn, sample_limit=args.samples))
     return 0
 
 
@@ -103,9 +142,25 @@ def build_parser() -> argparse.ArgumentParser:
     braiins.add_argument("--base-url", default="https://hashpower.braiins.com/webapi")
     braiins.set_defaults(func=cmd_collect_braiins_public)
 
+    cycle = sub.add_parser("cycle", help="collect OCEAN, collect public Braiins, then evaluate")
+    cycle.add_argument("--config")
+    cycle.add_argument("--skip-ocean", action="store_true")
+    cycle.add_argument("--skip-braiins", action="store_true")
+    cycle.set_defaults(func=cmd_cycle)
+
+    watch = sub.add_parser("watch", help="run bounded repeated monitor cycles")
+    watch.add_argument("--config")
+    watch.add_argument("--cycles", type=int, default=3)
+    watch.add_argument("--interval-seconds", type=int, default=300)
+    watch.set_defaults(func=cmd_watch)
+
     evaluate = sub.add_parser("evaluate", help="emit monitor-only strategy recommendation")
     evaluate.add_argument("--config")
     evaluate.set_defaults(func=cmd_evaluate)
+
+    report = sub.add_parser("report", help="print latest state and proposal")
+    report.add_argument("--samples", type=int, default=50)
+    report.set_defaults(func=cmd_report)
 
     guardrails = sub.add_parser("guardrails", help="print active guardrails")
     guardrails.add_argument("--config")
