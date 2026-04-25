@@ -31,6 +31,20 @@ class StrategyTests(unittest.TestCase):
         proposal = propose(config, ocean, market)
         self.assertEqual(proposal.action, "manual_bid")
 
+    def test_strategy_can_emit_manual_canary_near_breakeven(self) -> None:
+        config = _config()
+        ocean = OceanSnapshot(
+            timestamp_utc="2026-04-25T00:00:00+00:00",
+            network_difficulty_t=Decimal("135.59"),
+            avg_block_time_hours=Decimal("9"),
+        )
+        market = MarketSnapshot(
+            timestamp_utc="2026-04-25T00:00:00+00:00",
+            best_price_btc_per_eh_day=Decimal("0.46"),
+        )
+        proposal = propose(config, ocean, market)
+        self.assertEqual(proposal.action, "manual_canary")
+
 
 def _config() -> AppConfig:
     return AppConfig(
@@ -45,6 +59,8 @@ def _config() -> AppConfig:
             max_manual_order_btc=Decimal("0.00025"),
             max_daily_spend_btc=Decimal("0.00050"),
             max_price_btc_per_eh_day=Decimal("0.42"),
+            max_canary_price_btc_per_eh_day=Decimal("0.52"),
+            max_canary_expected_loss_btc=Decimal("0.000025"),
             min_discount_to_breakeven=Decimal("0.08"),
             min_duration_minutes=30,
             max_duration_minutes=720,

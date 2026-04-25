@@ -11,6 +11,29 @@ def validate_order(
     guardrails: GuardrailsConfig,
     breakeven_btc_per_eh_day: Decimal | None,
 ) -> list[str]:
+    violations = validate_order_structure(order, guardrails)
+
+    if (
+        guardrails.max_price_btc_per_eh_day > 0
+        and order.price_btc_per_eh_day > guardrails.max_price_btc_per_eh_day
+    ):
+        violations.append(
+            f"price exceeds max_price_btc_per_eh_day={guardrails.max_price_btc_per_eh_day}"
+        )
+    if breakeven_btc_per_eh_day and breakeven_btc_per_eh_day > 0:
+        required = breakeven_btc_per_eh_day * (Decimal("1") - guardrails.min_discount_to_breakeven)
+        if order.price_btc_per_eh_day > required:
+            violations.append(
+                "price does not clear required discount to breakeven "
+                f"({order.price_btc_per_eh_day} > {required})"
+            )
+    else:
+        violations.append("cannot validate discount without breakeven estimate")
+
+    return violations
+
+
+def validate_order_structure(order: CandidateOrder, guardrails: GuardrailsConfig) -> list[str]:
     violations: list[str] = []
 
     if not guardrails.recommend_only:
@@ -21,26 +44,10 @@ def validate_order(
         violations.append(f"spend exceeds max_manual_order_btc={guardrails.max_manual_order_btc}")
     if order.price_btc_per_eh_day <= 0:
         violations.append("price must be positive")
-    if (
-        guardrails.max_price_btc_per_eh_day > 0
-        and order.price_btc_per_eh_day > guardrails.max_price_btc_per_eh_day
-    ):
-        violations.append(
-            f"price exceeds max_price_btc_per_eh_day={guardrails.max_price_btc_per_eh_day}"
-        )
     if order.duration_minutes < guardrails.min_duration_minutes:
         violations.append(f"duration below min_duration_minutes={guardrails.min_duration_minutes}")
     if order.duration_minutes > guardrails.max_duration_minutes:
         violations.append(f"duration exceeds max_duration_minutes={guardrails.max_duration_minutes}")
-    if breakeven_btc_per_eh_day and breakeven_btc_per_eh_day > 0:
-        required = breakeven_btc_per_eh_day * (Decimal("1") - guardrails.min_discount_to_breakeven)
-        if order.price_btc_per_eh_day > required:
-            violations.append(
-                "price does not clear required discount to breakeven "
-                f"({order.price_btc_per_eh_day} > {required})"
-            )
-    else:
-        violations.append("cannot validate discount without breakeven estimate")
 
     return violations
 

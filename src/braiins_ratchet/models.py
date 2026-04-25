@@ -56,7 +56,7 @@ class CandidateOrder:
 
 @dataclass(frozen=True)
 class StrategyProposal:
-    action: Literal["observe", "manual_bid"]
+    action: Literal["observe", "manual_canary", "manual_bid"]
     reason: str
     order: CandidateOrder | None
     breakeven_btc_per_eh_day: Decimal | None

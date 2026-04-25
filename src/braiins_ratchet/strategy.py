@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from .config import AppConfig
 from .ev import breakeven_btc_per_eh_day, downside_penalty, expected_reward_for_order
-from .guardrails import validate_order
+from .guardrails import validate_order, validate_order_structure
 from .models import CandidateOrder, MarketSnapshot, OceanSnapshot, StrategyProposal
 
 
@@ -53,10 +53,10 @@ def propose(
     score = expected_net - downside_penalty(expected_reward, config.strategy.risk_lambda)
 
     violations = validate_order(order, config.guardrails, breakeven)
-    if violations:
+    if not violations and score > 0:
         return StrategyProposal(
-            action="observe",
-            reason="guardrail blocked: " + "; ".join(violations),
+            action="manual_bid",
+            reason="profit-seeking bid clears discount guardrails and positive risk-adjusted score",
             order=order,
             breakeven_btc_per_eh_day=breakeven,
             expected_reward_btc=expected_reward,
@@ -65,10 +65,15 @@ def propose(
             maturity_note=_maturity_note(ocean),
         )
 
-    if score <= 0:
+    canary_violations = _validate_canary(order, config, expected_net)
+    if not canary_violations:
         return StrategyProposal(
-            action="observe",
-            reason=f"risk-adjusted score is not positive ({score})",
+            action="manual_canary",
+            reason=(
+                "bounded research canary: profit guardrails not cleared, "
+                f"but expected_net={expected_net} is within loss budget "
+                f"{config.guardrails.max_canary_expected_loss_btc}"
+            ),
             order=order,
             breakeven_btc_per_eh_day=breakeven,
             expected_reward_btc=expected_reward,
@@ -78,8 +83,12 @@ def propose(
         )
 
     return StrategyProposal(
-        action="manual_bid",
-        reason="market price clears configured guardrails and positive risk-adjusted score",
+        action="observe",
+        reason=(
+            "no experiment recommended: "
+            + "; ".join(violations + canary_violations)
+            + f"; risk_adjusted_score={score}"
+        ),
         order=order,
         breakeven_btc_per_eh_day=breakeven,
         expected_reward_btc=expected_reward,
@@ -87,6 +96,24 @@ def propose(
         score_btc=score,
         maturity_note=_maturity_note(ocean),
     )
+
+
+def _validate_canary(order: CandidateOrder, config: AppConfig, expected_net: Decimal) -> list[str]:
+    violations = validate_order_structure(order, config.guardrails)
+    if (
+        config.guardrails.max_canary_price_btc_per_eh_day > 0
+        and order.price_btc_per_eh_day > config.guardrails.max_canary_price_btc_per_eh_day
+    ):
+        violations.append(
+            "price exceeds max_canary_price_btc_per_eh_day="
+            f"{config.guardrails.max_canary_price_btc_per_eh_day}"
+        )
+    if expected_net < -config.guardrails.max_canary_expected_loss_btc:
+        violations.append(
+            f"expected loss {abs(expected_net)} exceeds canary budget "
+            f"{config.guardrails.max_canary_expected_loss_btc}"
+        )
+    return violations
 
 
 def _observe(reason: str) -> StrategyProposal:

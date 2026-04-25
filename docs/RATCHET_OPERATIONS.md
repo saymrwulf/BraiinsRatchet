@@ -8,7 +8,7 @@ Run these commands from the repository root:
 ./scripts/ratchet once
 ```
 
-The result is a recommendation only. `manual_bid` means the strategy thinks a manually placed bid clears the configured guardrails. `observe` means no action is recommended.
+The result is a recommendation only. `observe` means no action is recommended. `manual_canary` means a tiny research experiment is inside the configured loss budget. `manual_bid` means a manually placed bid clears profit-seeking discount and risk guardrails.
 
 The report's sampled price min/avg/max uses public Braiins snapshots only. Manual imports are still stored and can drive evaluation, but they do not pollute live market summary statistics.
 

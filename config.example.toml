@@ -11,6 +11,8 @@ dashboard_url = "https://ocean.xyz/dashboard"
 max_manual_order_btc = "0.00025"
 max_daily_spend_btc = "0.00050"
 max_price_btc_per_eh_day = "0.42"
+max_canary_price_btc_per_eh_day = "0.52"
+max_canary_expected_loss_btc = "0.000025"
 min_discount_to_breakeven = "0.08"
 min_duration_minutes = 30
 max_duration_minutes = 720
@@ -20,4 +22,3 @@ recommend_only = true
 target_duration_minutes = 180
 target_spend_btc = "0.00010"
 risk_lambda = "0.35"
-

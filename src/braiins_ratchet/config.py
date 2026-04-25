@@ -38,6 +38,8 @@ class GuardrailsConfig:
     max_manual_order_btc: Decimal
     max_daily_spend_btc: Decimal
     max_price_btc_per_eh_day: Decimal
+    max_canary_price_btc_per_eh_day: Decimal
+    max_canary_expected_loss_btc: Decimal
     min_discount_to_breakeven: Decimal
     min_duration_minutes: int
     max_duration_minutes: int
@@ -81,6 +83,12 @@ def load_config(path: Path | None = None) -> AppConfig:
             max_manual_order_btc=_decimal(guardrails.get("max_manual_order_btc"), "0.0001"),
             max_daily_spend_btc=_decimal(guardrails.get("max_daily_spend_btc"), "0.0002"),
             max_price_btc_per_eh_day=_decimal(guardrails.get("max_price_btc_per_eh_day"), "0"),
+            max_canary_price_btc_per_eh_day=_decimal(
+                guardrails.get("max_canary_price_btc_per_eh_day"), "0"
+            ),
+            max_canary_expected_loss_btc=_decimal(
+                guardrails.get("max_canary_expected_loss_btc"), "0"
+            ),
             min_discount_to_breakeven=_decimal(guardrails.get("min_discount_to_breakeven"), "0.05"),
             min_duration_minutes=int(guardrails.get("min_duration_minutes", 30)),
             max_duration_minutes=int(guardrails.get("max_duration_minutes", 720)),

@@ -46,6 +46,8 @@ def _config() -> AppConfig:
             max_manual_order_btc=Decimal("0.00025"),
             max_daily_spend_btc=Decimal("0.00050"),
             max_price_btc_per_eh_day=Decimal("0.42"),
+            max_canary_price_btc_per_eh_day=Decimal("0.52"),
+            max_canary_expected_loss_btc=Decimal("0.000025"),
             min_discount_to_breakeven=Decimal("0.08"),
             min_duration_minutes=30,
             max_duration_minutes=720,

@@ -64,7 +64,15 @@ If it says:
 Strategy action: manual_bid
 ```
 
-The strategy thinks a small manual canary bid clears the configured guardrails. You still decide manually in the Braiins UI.
+The strategy thinks a small manual profit-seeking bid clears the configured discount guardrails. You still decide manually in the Braiins UI.
+
+If it says:
+
+```text
+Strategy action: manual_canary
+```
+
+The market is not a money-printer setup, but the expected loss is inside the configured research budget. This is the scientific mode: a tiny canary may be useful to learn about execution, timing, OCEAN accounting, stale/reject behavior, and TIDES maturity.
 
 Important fields:
 
@@ -95,7 +103,7 @@ Stop early with `Ctrl-C`.
 
 ## When To Act
 
-Only consider manual action when all of these are true:
+Only consider a profit-seeking manual bid when all of these are true:
 
 - `Strategy action: manual_bid`.
 - `score_btc` is positive.
@@ -104,6 +112,14 @@ Only consider manual action when all of these are true:
 - You can wait through the maturity window before judging the result.
 
 Do not act because OCEAN is "due". Block discovery is memoryless.
+
+Only consider a research canary when all of these are true:
+
+- `Strategy action: manual_canary`.
+- `proposed_spend_btc` is acceptable to lose.
+- `expected_net_btc` is not worse than the configured canary loss budget.
+- You are explicitly buying information, not pretending the edge is proven.
+- You can wait through the maturity window before judging the result.
 
 ## How Long To Wait After A Manual Canary
 

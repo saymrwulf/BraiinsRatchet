@@ -19,6 +19,12 @@ Maximize expected BTC profit, or minimize BTC loss, for manually buying BTC hash
 4. If the recommendation is executed manually, record the exact order parameters and later realized rewards.
 5. Keep changes to `strategy.py` only when they improve the measured score under comparable risk.
 
+Recommendations have different meanings:
+
+- `observe`: no action.
+- `manual_canary`: bounded information-buying; expected loss is allowed if it is inside the canary budget.
+- `manual_bid`: profit-seeking manual action; stricter discount and score guardrails apply.
+
 ## Hard Guardrails
 
 - No code path places, modifies, or cancels Braiins orders.
@@ -41,4 +47,3 @@ score = expected_net_btc - risk_penalty_btc - execution_penalty_btc
 ```
 
 The strategy must show break-even price, discount to break-even, spend, duration, and maturity assumptions.
-

@@ -107,7 +107,7 @@ Evaluates the latest stored OCEAN and Braiins snapshots against `config.example.
 PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli evaluate
 ```
 
-The command returns `observe` or `manual_bid`. It never places an order.
+The command returns `observe`, `manual_canary`, or `manual_bid`. It never places an order.
 
 ## `report`
 

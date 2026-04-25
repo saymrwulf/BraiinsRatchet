@@ -6,6 +6,7 @@ The first implementation is deliberately conservative:
 
 - The code never places, modifies, or cancels Braiins orders.
 - The default strategy emits recommendations only.
+- The strategy distinguishes `manual_canary` research experiments from `manual_bid` profit-seeking opportunities.
 - The Braiins integration accepts a watcher-only token only.
 - All mutable runtime state stays inside this repository under `data/`.
 - The Git branch is `master`.
@@ -53,6 +54,12 @@ The JSON shape is:
 The collector first uses unauthenticated public web endpoints from `hashpower.braiins.com`; no token is needed for live price action. See `docs/BRAIINS_PUBLIC_MARKET.md`.
 
 Watcher-only tokens are only relevant if we later need account-specific read-only data such as your private balance, historical fills, or order status. Owner tokens remain out of scope.
+
+## Recommendation States
+
+- `observe`: do nothing.
+- `manual_canary`: a tiny manually executed research experiment is within the configured loss budget.
+- `manual_bid`: a manually executed bid clears profit-seeking discount and risk guardrails.
 
 ## Documentation
 
