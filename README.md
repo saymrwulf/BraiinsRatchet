@@ -64,7 +64,7 @@ Watcher-only tokens are only relevant if we later need account-specific read-onl
 The Braiins market report distinguishes visible top-of-book from executable depth:
 
 - `best_ask_btc_per_eh_day`: cheapest visible ask.
-- `fillable_price_btc_per_eh_day`: cheapest ask level with enough unmatched supply for the configured target PH/s.
+- `fillable_price_btc_per_eh_day`: cheapest ask level with enough unmatched supply for the configured canary-sized target PH/s.
 - `suggested_bid_btc_per_eh_day`: fillable price plus the configured overpay cushion.
 
 ## Documentation

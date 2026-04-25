@@ -77,7 +77,7 @@ The market is not a money-printer setup, but the expected loss is inside the con
 Important fields:
 
 - `best_ask_btc_per_eh_day`: current buy reference from Braiins.
-- `fillable_price_btc_per_eh_day`: depth-aware price where enough unmatched ask supply exists for the configured target PH/s.
+- `fillable_price_btc_per_eh_day`: depth-aware price where enough unmatched ask supply exists for the configured canary-sized target PH/s.
 - `suggested_bid_btc_per_eh_day`: fillable price plus the configured overpay cushion; this is the shadow-autopilot would-bid price.
 - `breakeven_btc_per_eh_day`: estimated mining EV at current OCEAN/network inputs.
 - `score_btc`: risk-adjusted expected value. Negative means no action.
