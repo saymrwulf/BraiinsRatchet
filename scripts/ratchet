@@ -97,7 +97,7 @@ cmd_watch() {
   echo
   echo "Watch finished. Reading the cockpit now."
   echo
-  run_python -m braiins_ratchet.cli next
+  BRAIINS_RATCHET_IGNORE_PROCESS_WATCH=1 run_python -m braiins_ratchet.cli next
   return "$status"
 }
 

@@ -39,6 +39,15 @@ You do not need to babysit it. It will:
 
 If you want the technical report, run `./scripts/ratchet report`. The normal workflow intentionally shows the cockpit first.
 
+After a watch finishes, the cockpit enters a post-watch cooldown. That is deliberate.
+
+Post-watch cooldown means:
+
+1. The current experimental stage is complete.
+2. Starting another identical watch immediately is not useful ratcheting.
+3. The run report is the evidence artifact.
+4. The next planned touch is a later fresh sample, usually `./scripts/ratchet once`.
+
 ## Research Pathway
 
 The cockpit has two different time horizons:

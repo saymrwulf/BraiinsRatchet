@@ -48,6 +48,8 @@ At the end of a normal watch, inspect the ratchet record:
 
 The ledger is the main artifact. It says what was tested, how long it ran, what actions the strategy would have considered, and what adaptation should be considered next.
 
+After a completed watch, the cockpit should not immediately recommend another identical watch. It enters post-watch cooldown, which means the current stage is complete and the next useful operator touch is a later fresh sample.
+
 If a run already happened before automatic bookkeeping was available, reconstruct it from the stored SQLite snapshots:
 
 ```bash

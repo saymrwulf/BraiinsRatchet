@@ -9,6 +9,8 @@ import subprocess
 from .experiments import ACTIVE_WATCH, EXPERIMENT_LOG, REPORTS_DIR
 from .storage import latest_market_snapshot, latest_ocean_snapshot, latest_proposal
 
+POST_WATCH_COOLDOWN_MINUTES = 360
+
 
 def build_operator_cockpit(conn) -> str:
     ocean = latest_ocean_snapshot(conn)
@@ -17,6 +19,7 @@ def build_operator_cockpit(conn) -> str:
     latest_report = _latest_report()
     running_runs = _running_runs()
     active_watch = _active_watch()
+    completed_watch = _recent_completed_watch(latest_report, market.timestamp_utc if market else None)
     freshness = _freshness_minutes(market.timestamp_utc if market else None)
     is_fresh = freshness is not None and freshness <= 30
 
@@ -32,6 +35,7 @@ def build_operator_cockpit(conn) -> str:
         f"  Latest run report: {latest_report or 'none yet'}",
         f"  Experiment ledger: {EXPERIMENT_LOG.relative_to(REPORTS_DIR.parent) if EXPERIMENT_LOG.exists() else 'none yet'}",
         f"  Active watch: {active_watch or 'none detected'}",
+        f"  Research stage: {_research_stage(active_watch, completed_watch)}",
     ]
 
     if running_runs:
@@ -41,6 +45,7 @@ def build_operator_cockpit(conn) -> str:
     lines.extend(
         _do_this_now(
             active_watch=active_watch,
+            completed_watch=completed_watch,
             has_ocean=ocean is not None,
             has_market=market is not None,
             is_fresh=is_fresh,
@@ -51,6 +56,7 @@ def build_operator_cockpit(conn) -> str:
     lines.extend(
         _pathway_forecast(
             active_watch=active_watch,
+            completed_watch=completed_watch,
             has_ocean=ocean is not None,
             has_market=market is not None,
             is_fresh=is_fresh,
@@ -83,6 +89,7 @@ def build_operator_cockpit(conn) -> str:
 
 def _do_this_now(
     active_watch: str | None,
+    completed_watch: tuple[str, int] | None,
     has_ocean: bool,
     has_market: bool,
     is_fresh: bool,
@@ -95,6 +102,19 @@ def _do_this_now(
             "  You can leave it alone; it will write the experiment report when it finishes.",
             "  After the watch terminal finishes by itself, run exactly:",
             "    ./scripts/ratchet",
+        ]
+
+    if completed_watch and action == "manual_canary":
+        report_path, age_minutes = completed_watch
+        remaining = max(0, POST_WATCH_COOLDOWN_MINUTES - age_minutes)
+        return [
+            "  STOP.",
+            f"  The latest 2-hour watch already finished {age_minutes} minutes ago.",
+            f"  Report written: {report_path}",
+            "  Do not start another identical watch now.",
+            f"  Next planned operator touch: after about {remaining} minutes, run exactly:",
+            "    ./scripts/ratchet once",
+            "  Reason: this ratchet stage is complete; repeating it immediately would be loop-chasing, not research.",
         ]
 
     if not has_ocean or not has_market:
@@ -140,6 +160,7 @@ def _do_this_now(
 
 def _pathway_forecast(
     active_watch: str | None,
+    completed_watch: tuple[str, int] | None,
     has_ocean: bool,
     has_market: bool,
     is_fresh: bool,
@@ -151,6 +172,15 @@ def _pathway_forecast(
             "  Immediate, very likely: wait for the running watch to finish; workload is zero until it ends.",
             "  Midterm, likely: read the final cockpit and ledger summary; workload is about 5 minutes.",
             "  Longterm, possible: adjust one strategy knob if the report says the run taught us something.",
+        ]
+
+    if completed_watch and action == "manual_canary":
+        report_path, _age_minutes = completed_watch
+        return [
+            "  Planning probabilities are workflow estimates, not profit probabilities.",
+            f"  Immediate, certain: stop this stage and keep {report_path} as the evidence artifact.",
+            "  Midterm, likely: after cooldown, refresh with one once command and compare against this report.",
+            "  Longterm, possible: adjust exactly one knob only if repeated reports show the same pattern.",
         ]
 
     if not has_ocean or not has_market:
@@ -228,6 +258,32 @@ def _latest_report() -> str | None:
     return str(reports[0].relative_to(REPORTS_DIR.parent))
 
 
+def _recent_completed_watch(latest_report: str | None, latest_market_timestamp: str | None) -> tuple[str, int] | None:
+    if latest_report is None:
+        return None
+    report_path = REPORTS_DIR.parent / latest_report
+    if not report_path.name.startswith("run-") or not report_path.exists():
+        return None
+    market_dt = _parse_utc(latest_market_timestamp)
+    if market_dt is not None and report_path.stat().st_mtime < market_dt.timestamp():
+        return None
+    age_seconds = datetime.now(UTC).timestamp() - report_path.stat().st_mtime
+    age_minutes = max(0, int(age_seconds // 60))
+    if age_minutes > POST_WATCH_COOLDOWN_MINUTES:
+        return None
+    return latest_report, age_minutes
+
+
+def _research_stage(active_watch: str | None, completed_watch: tuple[str, int] | None) -> str:
+    if active_watch:
+        return "watch running"
+    if completed_watch:
+        report_path, age_minutes = completed_watch
+        remaining = max(0, POST_WATCH_COOLDOWN_MINUTES - age_minutes)
+        return f"post-watch cooldown ({remaining} minutes left, report {report_path})"
+    return "ready"
+
+
 def _running_runs() -> list[str]:
     if not EXPERIMENT_LOG.exists():
         return []
@@ -266,6 +322,8 @@ def _active_watch_from_state_file() -> str | None:
 
 
 def _active_watch_from_process_table() -> str | None:
+    if os.environ.get("BRAIINS_RATCHET_IGNORE_PROCESS_WATCH") == "1":
+        return None
     try:
         output = subprocess.check_output(
             ["ps", "-axo", "pid=,command="],
@@ -302,6 +360,14 @@ def _pid_exists(pid: int) -> bool:
 
 
 def _freshness_minutes(timestamp_utc: str | None) -> int | None:
+    parsed = _parse_utc(timestamp_utc)
+    if parsed is None:
+        return None
+    age = datetime.now(UTC) - parsed
+    return max(0, int(age.total_seconds() // 60))
+
+
+def _parse_utc(timestamp_utc: str | None) -> datetime | None:
     if not timestamp_utc:
         return None
     try:
@@ -310,8 +376,7 @@ def _freshness_minutes(timestamp_utc: str | None) -> int | None:
         return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
-    age = datetime.now(UTC) - parsed.astimezone(UTC)
-    return max(0, int(age.total_seconds() // 60))
+    return parsed.astimezone(UTC)
 
 
 def _freshness_text(freshness: int | None) -> str:
