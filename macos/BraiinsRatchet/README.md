@@ -14,10 +14,13 @@ This builds `macos/build/Braiins Ratchet.app` and opens the packaged app. Use th
 
 ## Current Scope
 
-- Native macOS SwiftUI cockpit.
-- Liquid-glass-inspired material panels.
-- Buttons for cockpit, lifecycle status, automation proposal, and full report.
+- Native macOS SwiftUI control room.
+- Mission Control with one explicit next action.
+- Research Map with the full ratchet pathway.
+- Monitor-only automation approval gate.
 - Manual exposure recording and closing controls.
+- Reports panel for raw artifacts.
+- Ratchet Lecture for the general autoresearch method.
 - Monitor-only. It never places Braiins orders.
 
 ## Product Direction

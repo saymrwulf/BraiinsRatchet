@@ -57,6 +57,8 @@ For the native macOS SwiftUI shell:
 
 This builds `macos/build/Braiins Ratchet.app` and opens the real app bundle. Do not use `swift run` for normal operation.
 
+The app is a native visual control room: Mission Control, Research Map, Manual Exposure ledger, Reports, and a Ratchet Lecture. The design rationale is in `docs/APP_DESIGN_RESEARCH.md`.
+
 For a 6-hour monitoring session:
 
 ```bash

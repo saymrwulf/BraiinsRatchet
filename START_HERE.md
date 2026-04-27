@@ -144,6 +144,14 @@ The app is a native cockpit over the same durable Python lifecycle engine.
 
 The app includes controls to record and close manual exposure, but the same rule applies: it never places Braiins orders.
 
+The app is organized as:
+
+1. `Mission Control`: one exact next action, cooldown, metrics, and automation approval.
+2. `Research Map`: visual autoresearch stage model.
+3. `Manual Exposure`: record or close manually executed Braiins exposure.
+4. `Reports`: raw cockpit, report, and ledger artifacts.
+5. `Ratchet Lecture`: the general observe, hypothesize, bound, mature, adapt method.
+
 ## Research Pathway
 
 The cockpit has two different time horizons:

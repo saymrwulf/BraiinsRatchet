@@ -18,6 +18,7 @@ Commands:
   app                Build and open the native macOS app.
   position           Record/list/close manually executed Braiins exposure.
   report             Print the latest stored report without fetching new data.
+  app-state          Print structured JSON for the native macOS app.
   experiments        Print the Karpathy-style experiment ledger.
   retro SINCE [UNTIL] Write a retroactive report from stored snapshots.
   raw-cycle          Run one full monitor cycle and print raw JSON.
@@ -42,7 +43,7 @@ USAGE
 
 ensure_venv() {
   if [[ ! -x "$PYTHON_BIN" ]]; then
-    echo "Creating local virtual environment at .venv ..."
+    echo "Creating local virtual environment at .venv ..." >&2
     python3 -m venv "$ROOT_DIR/.venv"
   fi
 }
@@ -113,6 +114,10 @@ cmd_report() {
   run_python -m braiins_ratchet.cli report
 }
 
+cmd_app_state() {
+  run_python -m braiins_ratchet.cli app-state
+}
+
 cmd_pipeline() {
   run_python -m braiins_ratchet.cli pipeline "$@"
 }
@@ -177,6 +182,7 @@ main() {
     app|mac-app) cmd_app "$@" ;;
     position|positions) cmd_position "$@" ;;
     report) cmd_report "$@" ;;
+    app-state) cmd_app_state "$@" ;;
     experiments) cmd_experiments "$@" ;;
     retro) cmd_retro "$@" ;;
     raw-cycle) cmd_raw_cycle "$@" ;;

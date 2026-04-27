@@ -1,0 +1,64 @@
+# Native App Design Research
+
+This app is not supposed to be a prettier terminal. It is supposed to be a control room for a risky, long-running research lifecycle.
+
+## Design Sources
+
+Apple's Liquid Glass guidance emphasizes system-native structure before visual effects:
+
+- Use standard SwiftUI/AppKit structure so controls, navigation, sheets, and toolbars inherit system behavior.
+- Keep navigation and controls in a distinct functional layer above the content.
+- Avoid overusing custom glass effects; too much glass becomes noise.
+- Support arbitrary window sizes with split views.
+- Preserve accessibility when transparency or motion is reduced.
+
+Source: <https://developer.apple.com/documentation/TechnologyOverviews/adopting-liquid-glass>
+
+Microsoft's Human-AI Interaction Guidelines are directly relevant because this app makes recommendations under uncertainty:
+
+- Make clear what the system can and cannot do.
+- Make clear how well it can do it.
+- Show contextually relevant information.
+- Explain why the system did what it did.
+- Support correction, dismissal, global controls, and cautious adaptation over time.
+
+Source: <https://www.microsoft.com/en-us/research/publication/guidelines-for-human-ai-interaction/>
+
+Nielsen Norman's usability heuristics matter because the operator may be tired, confused, or dealing with real money:
+
+- Show system status.
+- Use real-world language.
+- Prevent errors before they happen.
+- Prefer recognition over recall.
+- Provide clear recovery paths.
+
+Source: <https://media.nngroup.com/media/articles/attachments/Heuristic_Summary1-compressed.pdf>
+
+## Product Decisions
+
+The native app now treats the Python engine as a structured state provider, not as a terminal to embed. The new `app-state` command returns JSON with:
+
+- Current operator state.
+- Automation plan.
+- Cockpit text for audit/debug.
+- Latest OCEAN, Braiins, and strategy proposal payloads.
+
+The SwiftUI app turns that into native surfaces:
+
+- `Mission Control`: one exact action, cooldown, approval gate, and metrics.
+- `Research Map`: the ratchet pathway as a visual stage model.
+- `Manual Exposure`: the ledger for real manually placed Braiins exposure.
+- `Reports`: raw artifacts kept available but no longer primary.
+- `Ratchet Lecture`: a teachable model of observe, hypothesize, bound, mature, adapt.
+
+## The Ratchet UX Rule
+
+The app must always answer these questions without forcing the user to parse logs:
+
+1. Who is in control right now?
+2. What is the earliest useful next action?
+3. What evidence artifact exists?
+4. What action is blocked for safety?
+5. Which single knob, if any, is eligible for later adaptation?
+
+If the app cannot answer those questions graphically and in plain language, it is failing its purpose.

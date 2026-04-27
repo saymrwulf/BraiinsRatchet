@@ -1,6 +1,8 @@
 from pathlib import Path
 import unittest
 
+from braiins_ratchet.cli import build_parser
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -12,7 +14,13 @@ class MacAppPackagingTest(unittest.TestCase):
 
         self.assertIn("app|mac-app", text)
         self.assertIn("cmd_app", text)
+        self.assertIn("app-state", text)
         self.assertNotIn("swift run BraiinsRatchetMac", text)
+
+    def test_python_cli_exposes_structured_app_state(self):
+        args = build_parser().parse_args(["app-state"])
+
+        self.assertEqual(args.func.__name__, "cmd_app_state")
 
     def test_mac_app_builder_creates_bundle_contract(self):
         builder = ROOT / "scripts" / "build_mac_app"
@@ -36,3 +44,14 @@ class MacAppPackagingTest(unittest.TestCase):
             text = path.read_text()
             self.assertIn("./scripts/ratchet app", text)
             self.assertNotIn("swift run BraiinsRatchetMac", text)
+
+    def test_swift_app_uses_native_dashboard_not_raw_terminal_as_primary_ui(self):
+        source = ROOT / "macos" / "BraiinsRatchet" / "Sources" / "BraiinsRatchetMac" / "BraiinsRatchetApp.swift"
+        text = source.read_text()
+
+        self.assertIn("NavigationSplitView", text)
+        self.assertIn("MissionControlView", text)
+        self.assertIn("ResearchTimeline", text)
+        self.assertIn("AutoresearchOrb", text)
+        self.assertIn("AppStatePayload", text)
+        self.assertIn("loadAppState", text)

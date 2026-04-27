@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 import json
 from pathlib import Path
@@ -17,7 +18,7 @@ from .experiments import (
     summarize_since,
     write_retro_report,
 )
-from .guidance import build_operator_cockpit
+from .guidance import build_operator_cockpit, get_operator_state
 from .lifecycle import (
     close_manual_position,
     open_manual_position,
@@ -34,6 +35,7 @@ from .storage import (
     init_db,
     latest_market_snapshot,
     latest_ocean_snapshot,
+    latest_proposal,
     save_market_snapshot,
     save_ocean_snapshot,
     save_proposal,
@@ -154,6 +156,26 @@ def cmd_next(_: argparse.Namespace) -> int:
     with connect() as conn:
         init_db(conn)
         print(build_operator_cockpit(conn))
+    return 0
+
+
+def cmd_app_state(_: argparse.Namespace) -> int:
+    with connect() as conn:
+        init_db(conn)
+        operator_state = get_operator_state(conn)
+        automation_plan = build_automation_plan(conn)
+        payload = {
+            "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "operator_state": asdict(operator_state),
+            "automation_plan": asdict(automation_plan),
+            "cockpit": build_operator_cockpit(conn),
+            "latest": {
+                "ocean": _object_dict(latest_ocean_snapshot(conn)),
+                "market": _object_dict(latest_market_snapshot(conn)),
+                "proposal": _object_dict(latest_proposal(conn)),
+            },
+        }
+    print(json.dumps(payload, default=str, indent=2))
     return 0
 
 
@@ -317,6 +339,12 @@ def _proposal_json(proposal: object) -> str:
     return json.dumps(proposal, default=default, indent=2)
 
 
+def _object_dict(value: object | None) -> dict[str, object] | None:
+    if value is None:
+        return None
+    return dict(value.__dict__) if hasattr(value, "__dict__") else {"value": str(value)}
+
+
 def _run_one_fresh_cycle(config: object) -> None:
     with connect() as conn:
         run_cycle(conn, config)
@@ -386,6 +414,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     next_step = sub.add_parser("next", help="print exactly what the operator should do next")
     next_step.set_defaults(func=cmd_next)
+
+    app_state = sub.add_parser("app-state", help="print structured JSON for the native app")
+    app_state.set_defaults(func=cmd_app_state)
 
     pipeline = sub.add_parser("pipeline", help="propose and confirm the next automation step")
     pipeline.add_argument("--config")
