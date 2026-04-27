@@ -11,7 +11,7 @@ Braiins Ratchet
 Commands:
   next               Show exactly what to do next. Default command.
   setup              Create the local .venv and initialize the local database.
-  once               Run one full monitor cycle, then print the human report.
+  once               Fetch one fresh sample, then print the cockpit.
   watch [hours]      Run repeated monitor cycles for N hours. Default: 6.
   report             Print the latest stored report without fetching new data.
   experiments        Print the Karpathy-style experiment ledger.
@@ -58,7 +58,8 @@ cmd_next() {
 cmd_once() {
   run_python -m braiins_ratchet.cli cycle >/dev/null
   echo
-  run_python -m braiins_ratchet.cli report
+  echo "Fresh sample collected. Reading the cockpit now."
+  echo "Technical report is available with: ./scripts/ratchet report"
   echo
   run_python -m braiins_ratchet.cli next
 }
@@ -78,9 +79,12 @@ cmd_watch() {
   fi
 
   cycles=$((hours * 3600 / interval_seconds))
-  echo "Running $cycles cycles over about $hours hour(s), one cycle every $interval_seconds seconds."
-  echo "Stop early with Ctrl-C. This only reads public/OCEAN data and writes local snapshots."
-  echo "At completion it writes reports/EXPERIMENT_LOG.md and reports/run-*.md."
+  echo "Watch started. This terminal is now controlled by Braiins Ratchet for about $hours hour(s)."
+  echo "You do not need to babysit it. Leave this terminal open and come back later."
+  echo "It will run $cycles cycles, one cycle every $interval_seconds seconds."
+  echo "It only reads public/OCEAN data and writes local snapshots inside this repo."
+  echo "At the end it writes reports/EXPERIMENT_LOG.md plus a run report, then prints DO THIS NOW."
+  echo "Stop early only if you intentionally want a partial run: Ctrl-C."
   echo
 
   set +e
@@ -91,7 +95,7 @@ cmd_watch() {
     exit "$status"
   fi
   echo
-  run_python -m braiins_ratchet.cli report
+  echo "Watch finished. Reading the cockpit now."
   echo
   run_python -m braiins_ratchet.cli next
   return "$status"

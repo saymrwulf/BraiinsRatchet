@@ -106,8 +106,8 @@ During the watch:
 
 - Leave the terminal open.
 - Do not babysit every line.
-- If it prints `observe`, do nothing.
-- If it prints `manual_bid`, stop and run `./scripts/ratchet report` before deciding manually.
+- Ignore intermediate cycle lines unless you intentionally want to stop early.
+- Wait for the final cockpit. The final `DO THIS NOW` section is the instruction that matters.
 
 Stop early with `Ctrl-C`.
 
@@ -117,6 +117,7 @@ When the watch completes normally, it writes:
 
 - `reports/EXPERIMENT_LOG.md`: the master ratchet ledger.
 - `reports/run-*.md`: the detailed report for this one run.
+- The final cockpit, then control returns to your shell prompt.
 
 Read the ledger with:
 

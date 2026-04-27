@@ -81,7 +81,8 @@ def _do_this_now(
     if active_watch:
         return [
             "  WAIT.",
-            "  A watch is already running. Do not start another command.",
+            "  The running watch process is in control. Do not start another ratchet command.",
+            "  You can leave it alone; it will write the experiment report when it finishes.",
             "  After the watch terminal finishes by itself, run exactly:",
             "    ./scripts/ratchet",
         ]
@@ -113,7 +114,9 @@ def _do_this_now(
         return [
             "  Run exactly:",
             "    ./scripts/ratchet watch 2",
-            "  Reason: manual_canary means the model sees a bounded learning opportunity, not proven profit. The watch command will print this cockpit again when it ends.",
+            "  Then leave that terminal alone for about 2 hours.",
+            "  The watch command keeps control, writes the run report, and prints this cockpit again when it ends.",
+            "  Reason: manual_canary means the model sees a bounded learning opportunity, not proven profit.",
         ]
 
     return [

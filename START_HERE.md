@@ -23,8 +23,21 @@ Your job is:
 1. Run `./scripts/ratchet`.
 2. Do only what it says under `DO THIS NOW`.
 3. Ignore every other command unless `DO THIS NOW` tells you to run it.
-4. After a watch finishes, run `./scripts/ratchet` again.
+4. If it tells you to run `./scripts/ratchet watch 2`, start it, leave the terminal open, and come back after about 2 hours.
 5. If you manually place a Braiins canary, write down the order details outside this repo and wait through the maturity window before judging it.
+
+## Who Is In Control?
+
+If `watch` is running, the Python process is in control of that terminal.
+
+You do not need to babysit it. It will:
+
+1. Collect samples every 5 minutes.
+2. Write the run report when it finishes.
+3. Print the cockpit again.
+4. Return control to your shell prompt.
+
+If you want the technical report, run `./scripts/ratchet report`. The normal workflow intentionally shows the cockpit first.
 
 ## What The Actions Mean
 
