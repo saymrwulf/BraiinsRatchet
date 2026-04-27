@@ -60,6 +60,10 @@ class GuidanceTests(unittest.TestCase):
         self.assertIn("Latest strategy action: manual_canary", text)
         self.assertIn("./scripts/ratchet watch 2", text)
         self.assertIn("not proven profit", text)
+        self.assertIn("Ratchet Pathway Forecast", text)
+        self.assertIn("Immediate, very likely", text)
+        self.assertIn("Midterm, likely", text)
+        self.assertIn("Longterm, possible", text)
 
     def test_stale_market_data_routes_operator_to_once(self) -> None:
         conn = sqlite3.connect(":memory:")
@@ -99,6 +103,7 @@ class GuidanceTests(unittest.TestCase):
         self.assertIn("./scripts/ratchet once", text)
         self.assertIn("latest Braiins sample is stale", text)
         self.assertIn("DO THIS NOW", text)
+        self.assertIn("if the fresh state still says manual_canary", text)
 
 
 if __name__ == "__main__":

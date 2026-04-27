@@ -10,6 +10,14 @@ Run these commands from the repository root:
 
 This prints the cockpit and tells you exactly what to do next.
 
+The cockpit also prints `Ratchet Pathway Forecast`. That section is the stretched-out research path:
+
+- Immediate: the next operational step.
+- Midterm: the likely next experiment stage.
+- Longterm: what could happen after multiple reports mature.
+
+Those probabilities are workload and workflow estimates, not promises of mining profit.
+
 If the cockpit tells you to collect one fresh sample, run:
 
 ```bash

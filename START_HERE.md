@@ -39,6 +39,23 @@ You do not need to babysit it. It will:
 
 If you want the technical report, run `./scripts/ratchet report`. The normal workflow intentionally shows the cockpit first.
 
+## Research Pathway
+
+The cockpit has two different time horizons:
+
+1. `DO THIS NOW` is the only command you should run next.
+2. `Ratchet Pathway Forecast` tells you what the next stages probably look like.
+
+The forecast is not a profit prediction. It is a workload and research-flow prediction.
+
+It is split into:
+
+1. `Immediate`: what happens now.
+2. `Midterm`: what probably happens after the current run or sample.
+3. `Longterm`: what could happen after multiple reports mature.
+
+Expect the pathway to change after each report. That is the point of ratcheting: the next stage adapts to measured evidence instead of following a rigid plan.
+
 ## What The Actions Mean
 
 `observe` means do not bid.

@@ -47,6 +47,16 @@ def build_operator_cockpit(conn) -> str:
             action=proposal.action if proposal else None,
         )
     )
+    lines.extend(["", "Ratchet Pathway Forecast"])
+    lines.extend(
+        _pathway_forecast(
+            active_watch=active_watch,
+            has_ocean=ocean is not None,
+            has_market=market is not None,
+            is_fresh=is_fresh,
+            action=proposal.action if proposal else None,
+        )
+    )
     lines.extend(["", "How To Interpret The Current Action"])
     lines.extend(_action_explanation(proposal.action if proposal else None))
     lines.extend(["", "Ratchet Rule"])
@@ -125,6 +135,61 @@ def _do_this_now(
         "  If you want to continue passive learning later, run exactly:",
         "    ./scripts/ratchet watch 2",
         "  Reason: observe means the strategy did not find a useful action window.",
+    ]
+
+
+def _pathway_forecast(
+    active_watch: str | None,
+    has_ocean: bool,
+    has_market: bool,
+    is_fresh: bool,
+    action: str | None,
+) -> list[str]:
+    if active_watch:
+        return [
+            "  Planning probabilities are workflow estimates, not profit probabilities.",
+            "  Immediate, very likely: wait for the running watch to finish; workload is zero until it ends.",
+            "  Midterm, likely: read the final cockpit and ledger summary; workload is about 5 minutes.",
+            "  Longterm, possible: adjust one strategy knob if the report says the run taught us something.",
+        ]
+
+    if not has_ocean or not has_market:
+        return [
+            "  Planning probabilities are workflow estimates, not profit probabilities.",
+            "  Immediate, certain: initialize local state; workload is one setup command.",
+            "  Midterm, very likely: collect the first live sample; workload is one once command.",
+            "  Longterm, likely: start passive watch experiments after fresh data exists.",
+        ]
+
+    if not is_fresh:
+        return [
+            "  Planning probabilities are workflow estimates, not profit probabilities.",
+            "  Immediate, certain: refresh stale data with one once command; workload is under a minute.",
+            "  Midterm, likely: if the fresh state still says manual_canary, run a 2-hour watch.",
+            "  Longterm, possible: compare this fresh run against prior reports before changing any knob.",
+        ]
+
+    if action == "manual_bid":
+        return [
+            "  Planning probabilities are workflow estimates, not profit probabilities.",
+            "  Immediate, certain: inspect the full report before any manual Braiins action.",
+            "  Midterm, possible: manually place a tiny order only if the report still says manual_bid.",
+            "  Longterm, uncertain: wait through maturity and compare realized outcome against modeled EV.",
+        ]
+
+    if action == "manual_canary":
+        return [
+            "  Planning probabilities are workflow estimates, not profit probabilities.",
+            "  Immediate, very likely: run a 2-hour passive watch; workload is start command plus waiting.",
+            "  Midterm, likely: use the generated run report to decide one next knob to test.",
+            "  Longterm, possible: only after repeated mature evidence, consider a manual canary spend.",
+        ]
+
+    return [
+        "  Planning probabilities are workflow estimates, not profit probabilities.",
+        "  Immediate, certain: do not bid.",
+        "  Midterm, possible: run another passive watch later if you want more market coverage.",
+        "  Longterm, possible: change one strategy knob only after multiple observe windows are logged.",
     ]
 
 
