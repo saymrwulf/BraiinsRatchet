@@ -98,6 +98,32 @@ Use this to inspect persisted state without starting the loop:
 ./scripts/ratchet supervise --status
 ```
 
+## Manual Braiins Exposure
+
+If you manually start a Braiins bid, record it immediately:
+
+```bash
+./scripts/ratchet position open --description "Braiins order abc, 0.0001 BTC, 3h canary" --maturity-hours 72
+```
+
+While a manual position is active:
+
+1. The cockpit says `HOLD`.
+2. The supervisor blocks new watch experiments.
+3. Restarting the app keeps the manual exposure state.
+
+List positions:
+
+```bash
+./scripts/ratchet position list
+```
+
+When the Braiins/OCEAN exposure is truly finished:
+
+```bash
+./scripts/ratchet position close POSITION_ID
+```
+
 ## Native Mac App
 
 The native SwiftUI shell is in:
@@ -114,6 +140,8 @@ swift run BraiinsRatchetMac
 ```
 
 The app is a native cockpit over the same durable Python lifecycle engine.
+
+The app includes controls to record and close manual exposure, but the same rule applies: it never places Braiins orders.
 
 ## Research Pathway
 

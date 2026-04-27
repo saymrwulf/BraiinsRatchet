@@ -37,6 +37,18 @@ For the durable forever lifecycle supervisor:
 
 It persists lifecycle state in `data/ratchet.sqlite`. If the process crashes or the Mac reboots, start the same command again and it resumes from SQLite.
 
+When you manually place a Braiins bid, record the exposure so the supervisor blocks new experiments:
+
+```bash
+./scripts/ratchet position open --description "Braiins order abc" --maturity-hours 72
+```
+
+Close it only when finished:
+
+```bash
+./scripts/ratchet position close POSITION_ID
+```
+
 For the native macOS SwiftUI shell:
 
 ```bash

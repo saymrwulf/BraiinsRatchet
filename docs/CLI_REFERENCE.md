@@ -62,6 +62,28 @@ PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli supervise --status
 
 Crash/reboot contract: start `./scripts/ratchet supervise` again and it resumes from persisted SQLite lifecycle state.
 
+## `position`
+
+Records manually executed Braiins exposure so the lifecycle supervisor can hold state across days/weeks.
+
+Open a manual position:
+
+```bash
+PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli position open --description "Braiins order abc" --maturity-hours 72
+```
+
+List positions:
+
+```bash
+PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli position list
+```
+
+Close a finished position:
+
+```bash
+PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli position close 1
+```
+
 ## `init-db`
 
 Creates `data/ratchet.sqlite` if it does not exist.

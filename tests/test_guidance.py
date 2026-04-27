@@ -74,6 +74,7 @@ class GuidanceTests(unittest.TestCase):
     def test_stale_market_data_routes_operator_to_once(self) -> None:
         lines = _do_this_now(
             active_watch=None,
+            active_manual_positions=[],
             completed_watch=None,
             has_ocean=True,
             has_market=True,
@@ -89,6 +90,7 @@ class GuidanceTests(unittest.TestCase):
     def test_recent_completed_watch_stops_identical_watch_loop(self) -> None:
         lines = _do_this_now(
             active_watch=None,
+            active_manual_positions=[],
             completed_watch=_completed_watch(age_minutes=4),
             has_ocean=True,
             has_market=True,
@@ -105,6 +107,7 @@ class GuidanceTests(unittest.TestCase):
     def test_recent_completed_watch_forecast_enters_cooldown(self) -> None:
         lines = _pathway_forecast(
             active_watch=None,
+            active_manual_positions=[],
             completed_watch=_completed_watch(age_minutes=4),
             has_ocean=True,
             has_market=True,
@@ -116,6 +119,23 @@ class GuidanceTests(unittest.TestCase):
 
         self.assertIn("Immediate, certain: stop this stage", text)
         self.assertIn("Midterm, likely: after cooldown", text)
+
+    def test_active_manual_exposure_blocks_new_experiments(self) -> None:
+        lines = _do_this_now(
+            active_watch=None,
+            active_manual_positions=["#1 braiins long order"],
+            completed_watch=None,
+            has_ocean=True,
+            has_market=True,
+            is_fresh=True,
+            action="manual_canary",
+        )
+
+        text = "\n".join(lines)
+
+        self.assertIn("HOLD.", text)
+        self.assertIn("Manual Braiins exposure is active", text)
+        self.assertIn("position close POSITION_ID", text)
 
     def test_cooldown_status_includes_timer_and_progress_bar(self) -> None:
         lines = _cooldown_status_lines(_completed_watch(age_minutes=90))

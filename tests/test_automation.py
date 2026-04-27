@@ -33,12 +33,22 @@ class AutomationTests(unittest.TestCase):
         self.assertEqual(plan.kind, "external_wait")
         self.assertFalse(plan.needs_confirmation)
 
+    def test_manual_exposure_hold_does_not_prompt(self) -> None:
+        plan = build_automation_plan_from_state(
+            _state(active_manual_positions=["#1 braiins long order"])
+        )
+
+        self.assertEqual(plan.kind, "manual_exposure_hold")
+        self.assertFalse(plan.needs_confirmation)
+        self.assertIn("manual Braiins exposure", render_automation_plan(plan))
+
 
 def _state(
     *,
     action: str | None = None,
     active_watch: str | None = None,
     completed_watch: CompletedWatch | None = None,
+    active_manual_positions: list[str] | None = None,
 ) -> OperatorState:
     return OperatorState(
         has_ocean=True,
@@ -52,6 +62,7 @@ def _state(
         running_runs=[],
         latest_ocean_timestamp="2026-04-27T12:00:00+00:00",
         latest_market_timestamp="2026-04-27T12:00:00+00:00",
+        active_manual_positions=active_manual_positions or [],
     )
 
 

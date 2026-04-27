@@ -3,8 +3,12 @@ import sqlite3
 import unittest
 
 from braiins_ratchet.lifecycle import (
+    close_manual_position,
     get_lifecycle_status,
     init_lifecycle_db,
+    list_manual_positions,
+    open_manual_position,
+    render_manual_positions,
     render_lifecycle_status,
     render_supervisor_plan,
 )
@@ -43,6 +47,29 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn("Resume persisted lifecycle state", text)
         self.assertIn("Restart ./scripts/ratchet supervise", text)
         self.assertIn("never places", text)
+
+    def test_manual_position_open_blocks_lifecycle_until_closed(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        init_lifecycle_db(conn)
+
+        position_id = open_manual_position(
+            conn,
+            venue="braiins",
+            description="manual long bid",
+            expected_maturity_utc="2026-04-30T00:00:00+00:00",
+            payload={"spend_btc": "0.0001"},
+        )
+
+        status = get_lifecycle_status(conn)
+        active = list_manual_positions(conn, status="active")
+        self.assertEqual(status.phase, "manual_exposure_active")
+        self.assertEqual(len(active), 1)
+        self.assertEqual(active[0].id, position_id)
+        self.assertIn("manual long bid", render_manual_positions(conn))
+
+        self.assertTrue(close_manual_position(conn, position_id))
+        self.assertEqual(list_manual_positions(conn, status="active"), [])
+        self.assertEqual(get_lifecycle_status(conn).phase, "idle")
 
 
 if __name__ == "__main__":

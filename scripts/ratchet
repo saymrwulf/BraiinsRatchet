@@ -15,6 +15,7 @@ Commands:
   watch [hours]      Run repeated monitor cycles for N hours. Default: 6.
   pipeline           Propose timed automation, then ask yes/no.
   supervise          Run the durable forever lifecycle supervisor.
+  position           Record/list/close manually executed Braiins exposure.
   report             Print the latest stored report without fetching new data.
   experiments        Print the Karpathy-style experiment ledger.
   retro SINCE [UNTIL] Write a retroactive report from stored snapshots.
@@ -30,6 +31,7 @@ Examples:
   ./scripts/ratchet watch 6
   ./scripts/ratchet pipeline
   ./scripts/ratchet supervise
+  ./scripts/ratchet position list
   ./scripts/ratchet report
   ./scripts/ratchet experiments
   ./scripts/ratchet retro 2026-04-25T19:08:00+00:00 2026-04-25T21:05:00+00:00
@@ -117,6 +119,10 @@ cmd_supervise() {
   run_python -m braiins_ratchet.cli supervise "$@"
 }
 
+cmd_position() {
+  run_python -m braiins_ratchet.cli position "$@"
+}
+
 cmd_experiments() {
   run_python -m braiins_ratchet.cli experiments
 }
@@ -159,6 +165,7 @@ main() {
     watch) cmd_watch "$@" ;;
     pipeline|auto) cmd_pipeline "$@" ;;
     supervise|daemon) cmd_supervise "$@" ;;
+    position|positions) cmd_position "$@" ;;
     report) cmd_report "$@" ;;
     experiments) cmd_experiments "$@" ;;
     retro) cmd_retro "$@" ;;

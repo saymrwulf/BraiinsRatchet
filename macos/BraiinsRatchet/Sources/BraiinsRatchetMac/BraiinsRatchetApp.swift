@@ -14,6 +14,9 @@ struct BraiinsRatchetApp: App {
 struct ContentView: View {
     @State private var output = "Press Refresh Cockpit."
     @State private var isRunning = false
+    @State private var manualDescription = ""
+    @State private var maturityHours = "72"
+    @State private var closePositionId = ""
 
     var body: some View {
         ZStack {
@@ -31,6 +34,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 22) {
                 header
                 controls
+                manualExposureControls
                 outputPanel
             }
             .padding(30)
@@ -62,6 +66,9 @@ struct ContentView: View {
             glassButton("Automation Plan") {
                 Task { await runRatchet(["pipeline"], input: "no\n") }
             }
+            glassButton("Manual Positions") {
+                Task { await runRatchet(["position", "list"]) }
+            }
             glassButton("Full Report") {
                 Task { await runRatchet(["report"]) }
             }
@@ -71,6 +78,62 @@ struct ContentView: View {
                     .padding(.leading, 8)
             }
         }
+    }
+
+    private var manualExposureControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Manual Braiins Exposure")
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.82))
+            HStack(spacing: 10) {
+                TextField("Description, e.g. Braiins order abc 0.0001 BTC", text: $manualDescription)
+                    .textFieldStyle(.plain)
+                    .padding(10)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(.white)
+                TextField("Hours", text: $maturityHours)
+                    .textFieldStyle(.plain)
+                    .frame(width: 72)
+                    .padding(10)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(.white)
+                glassButton("Record Exposure") {
+                    let description = manualDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let hours = maturityHours.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !description.isEmpty else {
+                        output = "Enter a manual exposure description first."
+                        return
+                    }
+                    Task {
+                        await runRatchet([
+                            "position", "open",
+                            "--description", description,
+                            "--maturity-hours", hours.isEmpty ? "72" : hours
+                        ])
+                    }
+                }
+                TextField("ID", text: $closePositionId)
+                    .textFieldStyle(.plain)
+                    .frame(width: 54)
+                    .padding(10)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(.white)
+                glassButton("Close Exposure") {
+                    let positionId = closePositionId.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !positionId.isEmpty else {
+                        output = "Enter a manual position ID first."
+                        return
+                    }
+                    Task { await runRatchet(["position", "close", positionId]) }
+                }
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(.white.opacity(0.14), lineWidth: 1)
+        )
     }
 
     private var outputPanel: some View {

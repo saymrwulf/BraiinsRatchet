@@ -76,6 +76,22 @@ Check the persisted lifecycle state:
 
 This is still monitor-only. Manual Braiins bids remain outside the app unless separately recorded.
 
+## Manual Exposure Tracking
+
+When you manually place a Braiins order, record it:
+
+```bash
+./scripts/ratchet position open --description "Braiins order abc" --maturity-hours 72
+```
+
+The supervisor then blocks new experiments while the position is active. This is the stateful bridge for real-money operations that can run for days or weeks.
+
+Close it only when the exposure is truly finished:
+
+```bash
+./scripts/ratchet position close POSITION_ID
+```
+
 If a run already happened before automatic bookkeeping was available, reconstruct it from the stored SQLite snapshots:
 
 ```bash

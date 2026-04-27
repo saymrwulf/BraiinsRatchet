@@ -36,6 +36,7 @@ class OperatorState:
     running_runs: list[str]
     latest_ocean_timestamp: str | None
     latest_market_timestamp: str | None
+    active_manual_positions: list[str]
 
 
 def get_operator_state(conn) -> OperatorState:
@@ -56,6 +57,7 @@ def get_operator_state(conn) -> OperatorState:
         running_runs=_running_runs(),
         latest_ocean_timestamp=ocean.timestamp_utc if ocean else None,
         latest_market_timestamp=market.timestamp_utc if market else None,
+        active_manual_positions=_active_manual_positions(conn),
     )
 
 
@@ -74,6 +76,7 @@ def build_operator_cockpit(conn) -> str:
         f"  Latest run report: {state.latest_report or 'none yet'}",
         f"  Experiment ledger: {EXPERIMENT_LOG.relative_to(REPORTS_DIR.parent) if EXPERIMENT_LOG.exists() else 'none yet'}",
         f"  Active watch: {state.active_watch or 'none detected'}",
+        f"  Active manual exposure: {_manual_exposure_text(state.active_manual_positions)}",
         f"  Research stage: {_research_stage(state.active_watch, state.completed_watch)}",
     ]
 
@@ -87,6 +90,7 @@ def build_operator_cockpit(conn) -> str:
     lines.extend(
         _do_this_now(
             active_watch=state.active_watch,
+            active_manual_positions=state.active_manual_positions,
             completed_watch=state.completed_watch,
             has_ocean=state.has_ocean,
             has_market=state.has_market,
@@ -98,6 +102,7 @@ def build_operator_cockpit(conn) -> str:
     lines.extend(
         _pathway_forecast(
             active_watch=state.active_watch,
+            active_manual_positions=state.active_manual_positions,
             completed_watch=state.completed_watch,
             has_ocean=state.has_ocean,
             has_market=state.has_market,
@@ -132,6 +137,7 @@ def build_operator_cockpit(conn) -> str:
 
 def _do_this_now(
     active_watch: str | None,
+    active_manual_positions: list[str],
     completed_watch: CompletedWatch | None,
     has_ocean: bool,
     has_market: bool,
@@ -145,6 +151,16 @@ def _do_this_now(
             "  You can leave it alone; it will write the experiment report when it finishes.",
             "  After the watch terminal finishes by itself, run exactly:",
             "    ./scripts/ratchet",
+        ]
+
+    if active_manual_positions:
+        return [
+            "  HOLD.",
+            "  Manual Braiins exposure is active. Do not start new watch experiments.",
+            "  Keep supervisor running or check status with:",
+            "    ./scripts/ratchet supervise --status",
+            "  When the Braiins position is really finished, close it with:",
+            "    ./scripts/ratchet position close POSITION_ID",
         ]
 
     if completed_watch and action == "manual_canary":
@@ -203,6 +219,7 @@ def _do_this_now(
 
 def _pathway_forecast(
     active_watch: str | None,
+    active_manual_positions: list[str],
     completed_watch: CompletedWatch | None,
     has_ocean: bool,
     has_market: bool,
@@ -215,6 +232,14 @@ def _pathway_forecast(
             "  Immediate, very likely: wait for the running watch to finish; workload is zero until it ends.",
             "  Midterm, likely: read the final cockpit and ledger summary; workload is about 5 minutes.",
             "  Longterm, possible: adjust one strategy knob if the report says the run taught us something.",
+        ]
+
+    if active_manual_positions:
+        return [
+            "  Planning probabilities are workflow estimates, not profit probabilities.",
+            "  Immediate, certain: supervise the active manual exposure; workload is observation only.",
+            "  Midterm, likely: close the position manually when Braiins/OCEAN state confirms it is done.",
+            "  Longterm, possible: resume passive ratchet experiments only after exposure is closed.",
         ]
 
     if completed_watch and action == "manual_canary":
@@ -298,6 +323,30 @@ def _latest_report() -> str | None:
     if not reports:
         return None
     return str(reports[0].relative_to(REPORTS_DIR.parent))
+
+
+def _active_manual_positions(conn) -> list[str]:
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, venue, description, expected_maturity_utc
+            FROM manual_positions
+            WHERE status = 'active'
+            ORDER BY id DESC
+            """
+        ).fetchall()
+    except Exception:
+        return []
+    return [
+        f"#{row[0]} {row[1]} {row[2]} maturity={row[3] or 'unknown'}"
+        for row in rows
+    ]
+
+
+def _manual_exposure_text(positions: list[str]) -> str:
+    if not positions:
+        return "none recorded"
+    return "; ".join(positions)
 
 
 def _recent_completed_watch(latest_report: str | None, latest_market_timestamp: str | None) -> CompletedWatch | None:

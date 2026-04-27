@@ -16,6 +16,7 @@ swift run BraiinsRatchetMac
 - Native macOS SwiftUI cockpit.
 - Liquid-glass-inspired material panels.
 - Buttons for cockpit, lifecycle status, automation proposal, and full report.
+- Manual exposure recording and closing controls.
 - Monitor-only. It never places Braiins orders.
 
 ## Product Direction

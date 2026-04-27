@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime, timedelta
 import json
 from pathlib import Path
 import sys
@@ -17,7 +18,14 @@ from .experiments import (
     write_retro_report,
 )
 from .guidance import build_operator_cockpit
-from .lifecycle import render_lifecycle_status, render_supervisor_plan, run_supervisor
+from .lifecycle import (
+    close_manual_position,
+    open_manual_position,
+    render_lifecycle_status,
+    render_manual_positions,
+    render_supervisor_plan,
+    run_supervisor,
+)
 from .monitor import run_cycle
 from .ocean import fetch_snapshot
 from .report import build_text_report
@@ -209,6 +217,45 @@ def cmd_supervise(args: argparse.Namespace) -> int:
     return run_supervisor(config, once=args.once)
 
 
+def cmd_position_open(args: argparse.Namespace) -> int:
+    expected_maturity_utc = args.expected_maturity_utc
+    if expected_maturity_utc is None and args.maturity_hours is not None:
+        expected = datetime.now(UTC) + timedelta(hours=args.maturity_hours)
+        expected_maturity_utc = expected.isoformat(timespec="seconds")
+    payload = {}
+    if args.payload_json:
+        payload = json.loads(args.payload_json)
+    with connect() as conn:
+        init_db(conn)
+        position_id = open_manual_position(
+            conn,
+            venue=args.venue,
+            description=args.description,
+            expected_maturity_utc=expected_maturity_utc,
+            payload=payload,
+        )
+    print(f"manual_position_opened: #{position_id}")
+    print("Supervisor will hold new experiments while this position is active.")
+    return 0
+
+
+def cmd_position_close(args: argparse.Namespace) -> int:
+    with connect() as conn:
+        init_db(conn)
+        closed = close_manual_position(conn, args.position_id)
+    if not closed:
+        raise SystemExit(f"no active manual position found with id {args.position_id}")
+    print(f"manual_position_closed: #{args.position_id}")
+    return 0
+
+
+def cmd_position_list(_: argparse.Namespace) -> int:
+    with connect() as conn:
+        init_db(conn)
+        print(render_manual_positions(conn))
+    return 0
+
+
 def cmd_experiments(_: argparse.Namespace) -> int:
     if not EXPERIMENT_LOG.exists():
         print("No experiment log yet. Run ./scripts/ratchet watch 2.")
@@ -351,6 +398,24 @@ def build_parser() -> argparse.ArgumentParser:
     supervise.add_argument("--once", action="store_true", help="run one supervisor decision then stop")
     supervise.add_argument("--status", action="store_true", help="print persisted lifecycle status")
     supervise.set_defaults(func=cmd_supervise)
+
+    position = sub.add_parser("position", help="record manually executed Braiins exposure")
+    position_sub = position.add_subparsers(required=True)
+
+    position_open = position_sub.add_parser("open", help="record an active manual position")
+    position_open.add_argument("--venue", default="braiins")
+    position_open.add_argument("--description", required=True)
+    position_open.add_argument("--maturity-hours", type=int)
+    position_open.add_argument("--expected-maturity-utc")
+    position_open.add_argument("--payload-json")
+    position_open.set_defaults(func=cmd_position_open)
+
+    position_close = position_sub.add_parser("close", help="mark a manual position closed")
+    position_close.add_argument("position_id", type=int)
+    position_close.set_defaults(func=cmd_position_close)
+
+    position_list = position_sub.add_parser("list", help="list manual positions")
+    position_list.set_defaults(func=cmd_position_list)
 
     experiments = sub.add_parser("experiments", help="print the Karpathy-style experiment log")
     experiments.set_defaults(func=cmd_experiments)

@@ -24,6 +24,18 @@ class LifecycleStatus:
     message: str
 
 
+@dataclass(frozen=True)
+class ManualPosition:
+    id: int
+    opened_utc: str
+    closed_utc: str | None
+    status: str
+    venue: str
+    description: str
+    expected_maturity_utc: str | None
+    payload_json: str
+
+
 def init_lifecycle_db(conn) -> None:
     init_db(conn)
     conn.executescript(
@@ -68,6 +80,7 @@ def get_lifecycle_status(conn) -> LifecycleStatus:
 
 def render_lifecycle_status(conn) -> str:
     status = get_lifecycle_status(conn)
+    positions = list_manual_positions(conn, status="active")
     lines = [
         "Braiins Ratchet Lifecycle",
         "",
@@ -79,6 +92,13 @@ def render_lifecycle_status(conn) -> str:
     if status.next_action_utc:
         remaining = _seconds_until(status.next_action_utc)
         lines.append(f"Countdown: {_format_duration(remaining)}")
+    if positions:
+        lines.extend(["", "Active Manual Exposure"])
+        for position in positions:
+            lines.append(
+                f"  #{position.id} {position.venue}: {position.description} "
+                f"(expected maturity: {position.expected_maturity_utc or 'unknown'})"
+            )
     return "\n".join(lines)
 
 
@@ -92,10 +112,11 @@ def render_supervisor_plan() -> str:
             "Loop:",
             "  1. Resume persisted lifecycle state from data/ratchet.sqlite.",
             "  2. If cooldown is active, wait until the persisted next-action time.",
-            "  3. Run one 2-hour passive watch when the lifecycle is ready.",
-            "  4. Write the experiment ledger and run report.",
-            "  5. Enter post-watch cooldown.",
-            "  6. Repeat forever until you stop the process.",
+            "  3. If manual Braiins exposure is active, hold and do not start new experiments.",
+            "  4. Run one 2-hour passive watch when the lifecycle is ready.",
+            "  5. Write the experiment ledger and run report.",
+            "  6. Enter post-watch cooldown.",
+            "  7. Repeat forever until you stop the process.",
             "",
             "Crash/reboot behavior:",
             "  Restart ./scripts/ratchet supervise and it resumes from SQLite.",
@@ -118,6 +139,13 @@ def run_supervisor(config: AppConfig, *, once: bool = False) -> int:
     while True:
         with connect() as conn:
             init_lifecycle_db(conn)
+            active_positions = list_manual_positions(conn, status="active")
+            if active_positions:
+                _handle_manual_exposure(conn, active_positions)
+                if once:
+                    return 0
+                time.sleep(60)
+                continue
             state = _read_state(conn)
             phase = state.get("phase", "idle")
             next_action_utc = state.get("next_action_utc")
@@ -199,6 +227,165 @@ def _run_watch_stage(config: AppConfig) -> str:
     return experiment.run_id
 
 
+def open_manual_position(
+    conn,
+    *,
+    venue: str,
+    description: str,
+    expected_maturity_utc: str | None,
+    payload: dict[str, object] | None = None,
+) -> int:
+    init_lifecycle_db(conn)
+    opened = datetime.now(UTC).isoformat(timespec="seconds")
+    cursor = conn.execute(
+        """
+        INSERT INTO manual_positions (
+            opened_utc, closed_utc, status, venue, description,
+            expected_maturity_utc, payload_json
+        )
+        VALUES (?, NULL, 'active', ?, ?, ?, ?)
+        """,
+        (
+            opened,
+            venue,
+            description,
+            expected_maturity_utc,
+            json.dumps(payload or {}, sort_keys=True),
+        ),
+    )
+    position_id = int(cursor.lastrowid)
+    _write_state(
+        conn,
+        {
+            "phase": "manual_exposure_active",
+            "next_action_utc": expected_maturity_utc or "",
+            "last_run_id": _read_state(conn).get("last_run_id", ""),
+            "message": f"manual exposure active: position #{position_id}",
+        },
+    )
+    _record_event(
+        conn,
+        "manual_position_opened",
+        {"position_id": position_id, "venue": venue, "description": description},
+    )
+    return position_id
+
+
+def close_manual_position(conn, position_id: int) -> bool:
+    init_lifecycle_db(conn)
+    closed = datetime.now(UTC).isoformat(timespec="seconds")
+    cursor = conn.execute(
+        """
+        UPDATE manual_positions
+        SET status = 'closed', closed_utc = ?
+        WHERE id = ? AND status = 'active'
+        """,
+        (closed, position_id),
+    )
+    if cursor.rowcount == 0:
+        conn.commit()
+        return False
+    _record_event(conn, "manual_position_closed", {"position_id": position_id})
+    if not list_manual_positions(conn, status="active"):
+        state = _read_state(conn)
+        _write_state(
+            conn,
+            {
+                "phase": "idle",
+                "next_action_utc": "",
+                "last_run_id": state.get("last_run_id", ""),
+                "message": "manual exposure closed; lifecycle ready",
+            },
+        )
+    return True
+
+
+def list_manual_positions(conn, *, status: str | None = None) -> list[ManualPosition]:
+    init_lifecycle_db(conn)
+    where = "WHERE status = ?" if status else ""
+    params: tuple[object, ...] = (status,) if status else ()
+    rows = conn.execute(
+        f"""
+        SELECT id, opened_utc, closed_utc, status, venue, description,
+               expected_maturity_utc, payload_json
+        FROM manual_positions
+        {where}
+        ORDER BY id DESC
+        """,
+        params,
+    ).fetchall()
+    return [
+        ManualPosition(
+            id=int(row[0]),
+            opened_utc=row[1],
+            closed_utc=row[2],
+            status=row[3],
+            venue=row[4],
+            description=row[5],
+            expected_maturity_utc=row[6],
+            payload_json=row[7],
+        )
+        for row in rows
+    ]
+
+
+def render_manual_positions(conn) -> str:
+    positions = list_manual_positions(conn)
+    if not positions:
+        return "Manual Positions\n\nNo manual positions recorded."
+    lines = ["Manual Positions", ""]
+    for position in positions:
+        lines.extend(
+            [
+                f"#{position.id} {position.status} {position.venue}",
+                f"  opened_utc: {position.opened_utc}",
+                f"  closed_utc: {position.closed_utc or 'n/a'}",
+                f"  expected_maturity_utc: {position.expected_maturity_utc or 'n/a'}",
+                f"  description: {position.description}",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def _handle_manual_exposure(conn, positions: list[ManualPosition]) -> None:
+    next_maturity = _earliest_maturity(positions)
+    now = datetime.now(UTC)
+    if next_maturity and next_maturity > now:
+        phase = "manual_exposure_active"
+        message = "manual Braiins exposure active; supervisor will not start new experiments"
+        next_action = next_maturity.isoformat(timespec="seconds")
+    else:
+        phase = "manual_exposure_review"
+        message = "manual exposure needs review or explicit close before lifecycle resumes"
+        next_action = ""
+    state = _read_state(conn)
+    _write_state(
+        conn,
+        {
+            "phase": phase,
+            "next_action_utc": next_action,
+            "last_run_id": state.get("last_run_id", ""),
+            "message": message,
+        },
+    )
+    _record_event(
+        conn,
+        "manual_exposure_hold",
+        {"active_position_ids": [position.id for position in positions], "phase": phase},
+    )
+    print(render_lifecycle_status(conn), flush=True)
+
+
+def _earliest_maturity(positions: list[ManualPosition]) -> datetime | None:
+    maturities = [
+        _parse_utc(position.expected_maturity_utc)
+        for position in positions
+        if position.expected_maturity_utc
+    ]
+    parsed = [maturity for maturity in maturities if maturity is not None]
+    return min(parsed) if parsed else None
+
+
 def _read_state(conn) -> dict[str, str]:
     rows = conn.execute("SELECT key, value FROM lifecycle_state").fetchall()
     return {row[0]: row[1] for row in rows}
@@ -226,13 +413,22 @@ def _record_event(conn, event_type: str, payload: dict[str, object]) -> None:
 
 
 def _seconds_until(timestamp_utc: str) -> int:
+    target = _parse_utc(timestamp_utc)
+    if target is None:
+        return 0
+    return max(0, int((target - datetime.now(UTC)).total_seconds()))
+
+
+def _parse_utc(timestamp_utc: str | None) -> datetime | None:
+    if not timestamp_utc:
+        return None
     try:
         target = datetime.fromisoformat(timestamp_utc.replace("Z", "+00:00"))
     except ValueError:
-        return 0
+        return None
     if target.tzinfo is None:
         target = target.replace(tzinfo=UTC)
-    return max(0, int((target.astimezone(UTC) - datetime.now(UTC)).total_seconds()))
+    return target.astimezone(UTC)
 
 
 def _sleep_with_progress(seconds: int) -> None:

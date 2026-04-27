@@ -14,7 +14,7 @@ class AutomationPlan:
 
     @property
     def needs_confirmation(self) -> bool:
-        return self.kind not in {"no_action", "external_wait"}
+        return self.kind not in {"no_action", "external_wait", "manual_exposure_hold"}
 
 
 def build_automation_plan(conn) -> AutomationPlan:
@@ -30,6 +30,17 @@ def build_automation_plan_from_state(state: OperatorState) -> AutomationPlan:
             steps=[
                 "Wait for the running watch terminal to finish.",
                 "After it finishes, run ./scripts/ratchet or ./scripts/ratchet pipeline again.",
+            ],
+        )
+
+    if state.active_manual_positions:
+        return AutomationPlan(
+            kind="manual_exposure_hold",
+            title="Hold because manual Braiins exposure is active.",
+            steps=[
+                "Do not start a new watch.",
+                "Keep lifecycle supervision focused on the active manual position.",
+                "Close the manual position explicitly when it is truly finished.",
             ],
         )
 
