@@ -12,7 +12,7 @@ That is the same as:
 ./scripts/ratchet next
 ```
 
-It prints the cockpit: current state, exact next action, interpretation, safe commands, and ratchet rule.
+It prints the cockpit: current state, exact next action, interpretation, reference commands, and ratchet rule.
 
 ## Your Job
 
@@ -21,8 +21,8 @@ Your job is not to understand every metric.
 Your job is:
 
 1. Run `./scripts/ratchet`.
-2. Do the first item under `What You Do Now`.
-3. If a watch is running, leave it alone until it finishes.
+2. Do only what it says under `DO THIS NOW`.
+3. Ignore every other command unless `DO THIS NOW` tells you to run it.
 4. After a watch finishes, run `./scripts/ratchet` again.
 5. If you manually place a Braiins canary, write down the order details outside this repo and wait through the maturity window before judging it.
 

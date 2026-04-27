@@ -96,8 +96,9 @@ class GuidanceTests(unittest.TestCase):
         text = build_operator_cockpit(conn)
 
         self.assertIn("Braiins sample freshness: stale", text)
-        self.assertIn("run: ./scripts/ratchet once", text)
-        self.assertIn("do not interpret old price action", text)
+        self.assertIn("./scripts/ratchet once", text)
+        self.assertIn("latest Braiins sample is stale", text)
+        self.assertIn("DO THIS NOW", text)
 
 
 if __name__ == "__main__":

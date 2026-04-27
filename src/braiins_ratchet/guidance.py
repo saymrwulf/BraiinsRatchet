@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
+import os
 from pathlib import Path
+import subprocess
 
-from .experiments import EXPERIMENT_LOG, REPORTS_DIR
+from .experiments import ACTIVE_WATCH, EXPERIMENT_LOG, REPORTS_DIR
 from .storage import latest_market_snapshot, latest_ocean_snapshot, latest_proposal
 
 
@@ -13,6 +16,7 @@ def build_operator_cockpit(conn) -> str:
     proposal = latest_proposal(conn)
     latest_report = _latest_report()
     running_runs = _running_runs()
+    active_watch = _active_watch()
     freshness = _freshness_minutes(market.timestamp_utc if market else None)
     is_fresh = freshness is not None and freshness <= 30
 
@@ -27,14 +31,16 @@ def build_operator_cockpit(conn) -> str:
         f"  Latest strategy action: {proposal.action if proposal else 'none'}",
         f"  Latest run report: {latest_report or 'none yet'}",
         f"  Experiment ledger: {EXPERIMENT_LOG.relative_to(REPORTS_DIR.parent) if EXPERIMENT_LOG.exists() else 'none yet'}",
+        f"  Active watch: {active_watch or 'none detected'}",
     ]
 
     if running_runs:
         lines.append(f"  Ledger has unfinished run markers: {', '.join(running_runs)}")
 
-    lines.extend(["", "What You Do Now"])
+    lines.extend(["", "DO THIS NOW"])
     lines.extend(
-        _next_steps(
+        _do_this_now(
+            active_watch=active_watch,
             has_ocean=ocean is not None,
             has_market=market is not None,
             is_fresh=is_fresh,
@@ -51,9 +57,10 @@ def build_operator_cockpit(conn) -> str:
             "  Do not increase spend until multiple mature runs point in the same direction.",
         ]
     )
-    lines.extend(["", "Safe Commands"])
+    lines.extend(["", "Reference Commands"])
     lines.extend(
         [
+            "  Ignore this list unless DO THIS NOW explicitly tells you to use one.",
             "  ./scripts/ratchet next         # read this cockpit",
             "  ./scripts/ratchet once         # fetch one fresh sample and report",
             "  ./scripts/ratchet watch 2      # run a bounded 2-hour experiment",
@@ -64,45 +71,56 @@ def build_operator_cockpit(conn) -> str:
     return "\n".join(lines)
 
 
-def _next_steps(has_ocean: bool, has_market: bool, is_fresh: bool, action: str | None) -> list[str]:
+def _do_this_now(
+    active_watch: str | None,
+    has_ocean: bool,
+    has_market: bool,
+    is_fresh: bool,
+    action: str | None,
+) -> list[str]:
+    if active_watch:
+        return [
+            "  WAIT.",
+            "  A watch is already running. Do not start another command.",
+            "  After the watch terminal finishes by itself, run exactly:",
+            "    ./scripts/ratchet",
+        ]
+
     if not has_ocean or not has_market:
         return [
-            "  1. Run: ./scripts/ratchet setup",
-            "  2. Run: ./scripts/ratchet once",
-            "  3. Then run: ./scripts/ratchet next",
-            "  Reason: the cockpit needs at least one OCEAN sample and one Braiins sample.",
+            "  Run exactly:",
+            "    ./scripts/ratchet setup",
+            "  Reason: local setup is missing. The setup command will print the next command.",
         ]
 
     if not is_fresh:
         return [
-            "  1. If a watch is currently running in another terminal, do nothing until it finishes.",
-            "  2. If no watch is running, run: ./scripts/ratchet once",
-            "  3. Then run: ./scripts/ratchet next",
-            "  Reason: the latest Braiins sample is stale; do not interpret old price action as a current signal.",
+            "  Run exactly:",
+            "    ./scripts/ratchet once",
+            "  Reason: the latest Braiins sample is stale. The once command will fetch a fresh sample and print this cockpit again.",
         ]
 
     if action == "manual_bid":
         return [
-            "  1. Run: ./scripts/ratchet report",
-            "  2. Read the Plain English section.",
-            "  3. If you manually bid, keep spend tiny and write down the Braiins order parameters.",
-            "  4. After the order ends, wait through the maturity window before judging it.",
+            "  Run exactly:",
+            "    ./scripts/ratchet report",
+            "  Then read only the Plain English section.",
+            "  Manual Braiins action is allowed only after that report still says manual_bid.",
             "  Reason: manual_bid is the only profit-seeking signal, but execution is still manual.",
         ]
 
     if action == "manual_canary":
         return [
-            "  1. If a watch is currently running in another terminal, do nothing until it finishes.",
-            "  2. If no watch is running, run: ./scripts/ratchet watch 2",
-            "  3. After the watch finishes, run: ./scripts/ratchet next",
-            "  4. Read: ./scripts/ratchet experiments",
-            "  Reason: manual_canary means the model sees a bounded learning opportunity, not proven profit.",
+            "  Run exactly:",
+            "    ./scripts/ratchet watch 2",
+            "  Reason: manual_canary means the model sees a bounded learning opportunity, not proven profit. The watch command will print this cockpit again when it ends.",
         ]
 
     return [
-        "  1. If a watch is currently running in another terminal, do nothing until it finishes.",
-        "  2. If no watch is running and you want more data, run: ./scripts/ratchet watch 2",
-        "  3. If you are done for now, stop. No action is expected from you.",
+        "  STOP.",
+        "  No Braiins action is expected from you.",
+        "  If you want to continue passive learning later, run exactly:",
+        "    ./scripts/ratchet watch 2",
         "  Reason: observe means the strategy did not find a useful action window.",
     ]
 
@@ -156,6 +174,63 @@ def _running_runs() -> list[str]:
         elif current_run and line.startswith("- status_update:"):
             completed.add(current_run)
     return [run for run in running if run not in completed]
+
+
+def _active_watch() -> str | None:
+    from_state_file = _active_watch_from_state_file()
+    if from_state_file:
+        return from_state_file
+    return _active_watch_from_process_table()
+
+
+def _active_watch_from_state_file() -> str | None:
+    if not ACTIVE_WATCH.exists():
+        return None
+    try:
+        payload = json.loads(ACTIVE_WATCH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return "state file exists but is unreadable"
+    pid = payload.get("pid")
+    run_id = payload.get("run_id", "unknown-run")
+    if isinstance(pid, int) and _pid_exists(pid):
+        return f"{run_id} pid={pid}"
+    return None
+
+
+def _active_watch_from_process_table() -> str | None:
+    try:
+        output = subprocess.check_output(
+            ["ps", "-axo", "pid=,command="],
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    current_pid = os.getpid()
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        pid_text, _, command = stripped.partition(" ")
+        try:
+            pid = int(pid_text)
+        except ValueError:
+            continue
+        if pid == current_pid:
+            continue
+        if "braiins_ratchet.cli watch" in command or "./scripts/ratchet watch" in command:
+            return f"process pid={pid}"
+    return None
+
+
+def _pid_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def _freshness_minutes(timestamp_utc: str | None) -> int | None:

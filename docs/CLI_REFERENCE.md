@@ -23,7 +23,7 @@ PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli <command>
 
 ## `next`
 
-Prints the cockpit: current state, exact next operator action, interpretation, and safe commands.
+Prints the cockpit: current state, exact next operator action, interpretation, and reference commands.
 
 ```bash
 PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli next

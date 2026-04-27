@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+import json
+import os
 from pathlib import Path
 import uuid
 
@@ -12,6 +14,7 @@ from .report import build_text_report
 
 REPORTS_DIR = REPO_ROOT / "reports"
 EXPERIMENT_LOG = REPORTS_DIR / "EXPERIMENT_LOG.md"
+ACTIVE_WATCH = REPORTS_DIR / "ACTIVE_WATCH.json"
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,19 @@ def start_experiment(planned_cycles: int, interval_seconds: int, hypothesis: str
             "- plan: collect public Braiins depth, collect OCEAN state, compute shadow canary, store every proposal.\n"
             "- operator_action: none by default; manual action only if report later says manual_canary or manual_bid and operator agrees.\n"
         )
+    ACTIVE_WATCH.write_text(
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "run_id": run_id,
+                "started_utc": started,
+                "planned_cycles": planned_cycles,
+                "interval_seconds": interval_seconds,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     return ExperimentRun(run_id=run_id, started_utc=started)
 
 
@@ -87,6 +103,7 @@ def finish_experiment(
     report_path.write_text(_render_run_report(summary, text_report), encoding="utf-8")
     with EXPERIMENT_LOG.open("a", encoding="utf-8") as handle:
         handle.write(_render_log_completion(summary, report_path, status))
+    _clear_active_watch(run_id)
     return str(report_path.relative_to(REPO_ROOT))
 
 
@@ -240,6 +257,18 @@ def _ensure_log() -> None:
             "Karpathy-style ratchet rule: every run states a hypothesis, collects data, scores the current strategy, and records the next adaptation.\n",
             encoding="utf-8",
         )
+
+
+def _clear_active_watch(run_id: str) -> None:
+    if not ACTIVE_WATCH.exists():
+        return
+    try:
+        payload = json.loads(ACTIVE_WATCH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        ACTIVE_WATCH.unlink()
+        return
+    if payload.get("run_id") == run_id:
+        ACTIVE_WATCH.unlink()
 
 
 def _default_hypothesis() -> str:
