@@ -50,6 +50,14 @@ The ledger is the main artifact. It says what was tested, how long it ran, what 
 
 After a completed watch, the cockpit should not immediately recommend another identical watch. It enters post-watch cooldown, which means the current stage is complete and the next useful operator touch is a later fresh sample.
 
+During cooldown, the cockpit prints a progress bar, remaining minutes, and the earliest next action time. To let the app wait and perform the next monitor-only refresh after explicit approval, run:
+
+```bash
+./scripts/ratchet pipeline
+```
+
+The pipeline prints its plan and asks for `yes` or `no` before doing anything. It never places Braiins orders.
+
 If a run already happened before automatic bookkeeping was available, reconstruct it from the stored SQLite snapshots:
 
 ```bash

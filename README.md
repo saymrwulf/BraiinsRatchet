@@ -21,6 +21,14 @@ The first implementation is deliberately conservative:
 
 `./scripts/ratchet` is the cockpit. It tells you exactly what to do next.
 
+If the cockpit is in cooldown and you want the app to wait until the earliest next action, run:
+
+```bash
+./scripts/ratchet pipeline
+```
+
+It prints the exact monitor-only plan and asks `yes/no` before doing anything.
+
 For a 6-hour monitoring session:
 
 ```bash

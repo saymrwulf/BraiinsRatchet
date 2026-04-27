@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import time
 
+from .automation import build_automation_plan, render_automation_plan
 from .braiins import BraiinsPublicClient, market_snapshot_from_json_file
 from .config import load_config
 from .experiments import (
@@ -147,6 +148,50 @@ def cmd_next(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pipeline(args: argparse.Namespace) -> int:
+    config = load_config(Path(args.config) if args.config else None)
+    with connect() as conn:
+        init_db(conn)
+        plan = build_automation_plan(conn)
+    print(render_automation_plan(plan))
+    if not plan.needs_confirmation:
+        return 0
+    if not args.yes:
+        answer = input("> ").strip().lower()
+        if answer not in {"y", "yes"}:
+            print("Automation cancelled. No action was taken.")
+            return 0
+
+    if plan.kind == "wait_then_once":
+        _wait_with_progress(plan.wait_seconds)
+        _run_one_fresh_cycle(config)
+        _print_cockpit()
+        return 0
+    if plan.kind == "once_now":
+        _run_one_fresh_cycle(config)
+        _print_cockpit()
+        return 0
+    if plan.kind == "watch_2h":
+        result = cmd_watch(
+            argparse.Namespace(
+                config=args.config,
+                cycles=24,
+                interval_seconds=300,
+                hypothesis="automation pipeline: bounded passive watch",
+            )
+        )
+        _print_cockpit()
+        return result
+    if plan.kind == "report_only":
+        with connect() as conn:
+            init_db(conn)
+            print(build_text_report(conn))
+        return 0
+
+    print("Automation plan had no executable action.")
+    return 0
+
+
 def cmd_experiments(_: argparse.Namespace) -> int:
     if not EXPERIMENT_LOG.exists():
         print("No experiment log yet. Run ./scripts/ratchet watch 2.")
@@ -208,6 +253,29 @@ def _proposal_json(proposal: object) -> str:
     return json.dumps(proposal, default=default, indent=2)
 
 
+def _run_one_fresh_cycle(config: object) -> None:
+    with connect() as conn:
+        run_cycle(conn, config)
+
+
+def _print_cockpit() -> None:
+    with connect() as conn:
+        init_db(conn)
+        print(build_operator_cockpit(conn))
+
+
+def _wait_with_progress(wait_seconds: int) -> None:
+    remaining = max(0, wait_seconds)
+    if remaining == 0:
+        return
+    print(f"Waiting {remaining // 60} minute(s) before the next allowed action.")
+    while remaining > 0:
+        sleep_for = min(60, remaining)
+        time.sleep(sleep_for)
+        remaining -= sleep_for
+        print(f"Timer: {remaining // 60} minute(s) remaining.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="braiins-ratchet")
     sub = parser.add_subparsers(required=True)
@@ -254,6 +322,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     next_step = sub.add_parser("next", help="print exactly what the operator should do next")
     next_step.set_defaults(func=cmd_next)
+
+    pipeline = sub.add_parser("pipeline", help="propose and confirm the next automation step")
+    pipeline.add_argument("--config")
+    pipeline.add_argument("--yes", action="store_true", help="accept the printed plan without prompting")
+    pipeline.set_defaults(func=cmd_pipeline)
 
     experiments = sub.add_parser("experiments", help="print the Karpathy-style experiment log")
     experiments.set_defaults(func=cmd_experiments)

@@ -48,6 +48,31 @@ Post-watch cooldown means:
 3. The run report is the evidence artifact.
 4. The next planned touch is a later fresh sample, usually `./scripts/ratchet once`.
 
+During cooldown, the cockpit shows:
+
+1. A progress bar.
+2. The earliest next action time.
+3. The remaining minutes.
+
+## Controlled Automation
+
+If you do not want to babysit the cooldown manually, run:
+
+```bash
+./scripts/ratchet pipeline
+```
+
+The pipeline first prints a proposal like:
+
+```text
+I am going to: wait until this time, run one fresh sample, print the cockpit, then stop.
+Are you OK with this? Type yes or no.
+```
+
+It only runs after you type `yes`.
+
+It is still monitor-only. It never places, changes, or cancels Braiins orders.
+
 ## Research Pathway
 
 The cockpit has two different time horizons:

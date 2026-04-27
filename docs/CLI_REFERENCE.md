@@ -29,6 +29,23 @@ Prints the cockpit: current state, exact next operator action, interpretation, a
 PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli next
 ```
 
+## `pipeline`
+
+Prints a monitor-only automation proposal and asks for `yes` or `no`.
+
+Example behavior during post-watch cooldown:
+
+```text
+I am going to: Wait for post-watch cooldown, then refresh once.
+Are you OK with this? Type yes or no.
+```
+
+If approved, it waits until the earliest next action time, runs one fresh monitor cycle, prints the cockpit, and stops.
+
+```bash
+PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli pipeline
+```
+
 ## `init-db`
 
 Creates `data/ratchet.sqlite` if it does not exist.

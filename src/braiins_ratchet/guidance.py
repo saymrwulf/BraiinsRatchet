@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
 import os
@@ -12,59 +13,100 @@ from .storage import latest_market_snapshot, latest_ocean_snapshot, latest_propo
 POST_WATCH_COOLDOWN_MINUTES = 360
 
 
-def build_operator_cockpit(conn) -> str:
+@dataclass(frozen=True)
+class CompletedWatch:
+    report_path: str
+    age_minutes: int
+    remaining_minutes: int
+    cooldown_minutes: int
+    earliest_action_utc: str
+    earliest_action_local: str
+
+
+@dataclass(frozen=True)
+class OperatorState:
+    has_ocean: bool
+    has_market: bool
+    action: str | None
+    active_watch: str | None
+    completed_watch: CompletedWatch | None
+    is_fresh: bool
+    freshness_minutes: int | None
+    latest_report: str | None
+    running_runs: list[str]
+    latest_ocean_timestamp: str | None
+    latest_market_timestamp: str | None
+
+
+def get_operator_state(conn) -> OperatorState:
     ocean = latest_ocean_snapshot(conn)
     market = latest_market_snapshot(conn)
     proposal = latest_proposal(conn)
     latest_report = _latest_report()
-    running_runs = _running_runs()
-    active_watch = _active_watch()
-    completed_watch = _recent_completed_watch(latest_report, market.timestamp_utc if market else None)
     freshness = _freshness_minutes(market.timestamp_utc if market else None)
-    is_fresh = freshness is not None and freshness <= 30
+    return OperatorState(
+        has_ocean=ocean is not None,
+        has_market=market is not None,
+        action=proposal.action if proposal else None,
+        active_watch=_active_watch(),
+        completed_watch=_recent_completed_watch(latest_report, market.timestamp_utc if market else None),
+        is_fresh=freshness is not None and freshness <= 30,
+        freshness_minutes=freshness,
+        latest_report=latest_report,
+        running_runs=_running_runs(),
+        latest_ocean_timestamp=ocean.timestamp_utc if ocean else None,
+        latest_market_timestamp=market.timestamp_utc if market else None,
+    )
+
+
+def build_operator_cockpit(conn) -> str:
+    state = get_operator_state(conn)
 
     lines = [
         "Braiins Ratchet Cockpit",
         "",
         "Situation",
-        f"  Database: {'ready' if ocean or market or proposal else 'empty'}",
-        f"  Latest OCEAN sample: {ocean.timestamp_utc if ocean else 'none'}",
-        f"  Latest Braiins sample: {market.timestamp_utc if market else 'none'}",
-        f"  Braiins sample freshness: {_freshness_text(freshness)}",
-        f"  Latest strategy action: {proposal.action if proposal else 'none'}",
-        f"  Latest run report: {latest_report or 'none yet'}",
+        f"  Database: {'ready' if state.has_ocean or state.has_market or state.action else 'empty'}",
+        f"  Latest OCEAN sample: {state.latest_ocean_timestamp or 'none'}",
+        f"  Latest Braiins sample: {state.latest_market_timestamp or 'none'}",
+        f"  Braiins sample freshness: {_freshness_text(state.freshness_minutes)}",
+        f"  Latest strategy action: {state.action or 'none'}",
+        f"  Latest run report: {state.latest_report or 'none yet'}",
         f"  Experiment ledger: {EXPERIMENT_LOG.relative_to(REPORTS_DIR.parent) if EXPERIMENT_LOG.exists() else 'none yet'}",
-        f"  Active watch: {active_watch or 'none detected'}",
-        f"  Research stage: {_research_stage(active_watch, completed_watch)}",
+        f"  Active watch: {state.active_watch or 'none detected'}",
+        f"  Research stage: {_research_stage(state.active_watch, state.completed_watch)}",
     ]
 
-    if running_runs:
-        lines.append(f"  Ledger has unfinished run markers: {', '.join(running_runs)}")
+    if state.completed_watch:
+        lines.extend(_cooldown_status_lines(state.completed_watch))
+
+    if state.running_runs:
+        lines.append(f"  Ledger has unfinished run markers: {', '.join(state.running_runs)}")
 
     lines.extend(["", "DO THIS NOW"])
     lines.extend(
         _do_this_now(
-            active_watch=active_watch,
-            completed_watch=completed_watch,
-            has_ocean=ocean is not None,
-            has_market=market is not None,
-            is_fresh=is_fresh,
-            action=proposal.action if proposal else None,
+            active_watch=state.active_watch,
+            completed_watch=state.completed_watch,
+            has_ocean=state.has_ocean,
+            has_market=state.has_market,
+            is_fresh=state.is_fresh,
+            action=state.action,
         )
     )
     lines.extend(["", "Ratchet Pathway Forecast"])
     lines.extend(
         _pathway_forecast(
-            active_watch=active_watch,
-            completed_watch=completed_watch,
-            has_ocean=ocean is not None,
-            has_market=market is not None,
-            is_fresh=is_fresh,
-            action=proposal.action if proposal else None,
+            active_watch=state.active_watch,
+            completed_watch=state.completed_watch,
+            has_ocean=state.has_ocean,
+            has_market=state.has_market,
+            is_fresh=state.is_fresh,
+            action=state.action,
         )
     )
     lines.extend(["", "How To Interpret The Current Action"])
-    lines.extend(_action_explanation(proposal.action if proposal else None))
+    lines.extend(_action_explanation(state.action))
     lines.extend(["", "Ratchet Rule"])
     lines.extend(
         [
@@ -80,6 +122,7 @@ def build_operator_cockpit(conn) -> str:
             "  ./scripts/ratchet next         # read this cockpit",
             "  ./scripts/ratchet once         # fetch one fresh sample and report",
             "  ./scripts/ratchet watch 2      # run a bounded 2-hour experiment",
+            "  ./scripts/ratchet pipeline     # propose automation, then ask yes/no",
             "  ./scripts/ratchet experiments  # read the experiment ledger",
             "  ./scripts/ratchet report       # read the latest raw human report",
         ]
@@ -89,7 +132,7 @@ def build_operator_cockpit(conn) -> str:
 
 def _do_this_now(
     active_watch: str | None,
-    completed_watch: tuple[str, int] | None,
+    completed_watch: CompletedWatch | None,
     has_ocean: bool,
     has_market: bool,
     is_fresh: bool,
@@ -105,14 +148,14 @@ def _do_this_now(
         ]
 
     if completed_watch and action == "manual_canary":
-        report_path, age_minutes = completed_watch
-        remaining = max(0, POST_WATCH_COOLDOWN_MINUTES - age_minutes)
         return [
             "  STOP.",
-            f"  The latest 2-hour watch already finished {age_minutes} minutes ago.",
-            f"  Report written: {report_path}",
+            f"  The latest 2-hour watch already finished {completed_watch.age_minutes} minutes ago.",
+            f"  Report written: {completed_watch.report_path}",
             "  Do not start another identical watch now.",
-            f"  Next planned operator touch: after about {remaining} minutes, run exactly:",
+            f"  Earliest next action: {completed_watch.earliest_action_local}",
+            f"  Time remaining: {completed_watch.remaining_minutes} minutes.",
+            "  At or after that time, run exactly:",
             "    ./scripts/ratchet once",
             "  Reason: this ratchet stage is complete; repeating it immediately would be loop-chasing, not research.",
         ]
@@ -160,7 +203,7 @@ def _do_this_now(
 
 def _pathway_forecast(
     active_watch: str | None,
-    completed_watch: tuple[str, int] | None,
+    completed_watch: CompletedWatch | None,
     has_ocean: bool,
     has_market: bool,
     is_fresh: bool,
@@ -175,10 +218,9 @@ def _pathway_forecast(
         ]
 
     if completed_watch and action == "manual_canary":
-        report_path, _age_minutes = completed_watch
         return [
             "  Planning probabilities are workflow estimates, not profit probabilities.",
-            f"  Immediate, certain: stop this stage and keep {report_path} as the evidence artifact.",
+            f"  Immediate, certain: stop this stage and keep {completed_watch.report_path} as the evidence artifact.",
             "  Midterm, likely: after cooldown, refresh with one once command and compare against this report.",
             "  Longterm, possible: adjust exactly one knob only if repeated reports show the same pattern.",
         ]
@@ -258,7 +300,7 @@ def _latest_report() -> str | None:
     return str(reports[0].relative_to(REPORTS_DIR.parent))
 
 
-def _recent_completed_watch(latest_report: str | None, latest_market_timestamp: str | None) -> tuple[str, int] | None:
+def _recent_completed_watch(latest_report: str | None, latest_market_timestamp: str | None) -> CompletedWatch | None:
     if latest_report is None:
         return None
     report_path = REPORTS_DIR.parent / latest_report
@@ -271,17 +313,48 @@ def _recent_completed_watch(latest_report: str | None, latest_market_timestamp: 
     age_minutes = max(0, int(age_seconds // 60))
     if age_minutes > POST_WATCH_COOLDOWN_MINUTES:
         return None
-    return latest_report, age_minutes
+    remaining_minutes = max(0, POST_WATCH_COOLDOWN_MINUTES - age_minutes)
+    earliest_action = datetime.fromtimestamp(report_path.stat().st_mtime, UTC)
+    earliest_action = earliest_action.replace(microsecond=0)
+    earliest_action = earliest_action.timestamp() + (POST_WATCH_COOLDOWN_MINUTES * 60)
+    earliest_action_utc = datetime.fromtimestamp(earliest_action, UTC)
+    earliest_action_local = earliest_action_utc.astimezone()
+    return CompletedWatch(
+        report_path=latest_report,
+        age_minutes=age_minutes,
+        remaining_minutes=remaining_minutes,
+        cooldown_minutes=POST_WATCH_COOLDOWN_MINUTES,
+        earliest_action_utc=earliest_action_utc.isoformat(timespec="seconds"),
+        earliest_action_local=earliest_action_local.isoformat(timespec="seconds"),
+    )
 
 
-def _research_stage(active_watch: str | None, completed_watch: tuple[str, int] | None) -> str:
+def _research_stage(active_watch: str | None, completed_watch: CompletedWatch | None) -> str:
     if active_watch:
         return "watch running"
     if completed_watch:
-        report_path, age_minutes = completed_watch
-        remaining = max(0, POST_WATCH_COOLDOWN_MINUTES - age_minutes)
-        return f"post-watch cooldown ({remaining} minutes left, report {report_path})"
+        return (
+            "post-watch cooldown "
+            f"({completed_watch.remaining_minutes} minutes left, report {completed_watch.report_path})"
+        )
     return "ready"
+
+
+def _cooldown_status_lines(completed_watch: CompletedWatch) -> list[str]:
+    elapsed = min(completed_watch.cooldown_minutes, completed_watch.age_minutes)
+    percent = int((elapsed / completed_watch.cooldown_minutes) * 100)
+    return [
+        f"  Cooldown progress: {_progress_bar(elapsed, completed_watch.cooldown_minutes)} {percent}%",
+        f"  Earliest next action: {completed_watch.earliest_action_local}",
+        f"  Cooldown remaining: {completed_watch.remaining_minutes} minutes",
+    ]
+
+
+def _progress_bar(elapsed: int, total: int, width: int = 20) -> str:
+    if total <= 0:
+        return "[" + ("#" * width) + "]"
+    filled = min(width, max(0, int(round((elapsed / total) * width))))
+    return "[" + ("#" * filled) + ("-" * (width - filled)) + "]"
 
 
 def _running_runs() -> list[str]:
