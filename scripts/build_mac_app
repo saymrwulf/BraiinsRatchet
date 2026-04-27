@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PACKAGE_DIR="$ROOT_DIR/macos/BraiinsRatchet"
+BUILD_DIR="$ROOT_DIR/macos/build"
+APP_NAME="Braiins Ratchet.app"
+APP_DIR="$BUILD_DIR/$APP_NAME"
+CONTENTS_DIR="$APP_DIR/Contents"
+MACOS_DIR="$CONTENTS_DIR/MacOS"
+RESOURCES_DIR="$CONTENTS_DIR/Resources"
+EXECUTABLE_NAME="BraiinsRatchetMac"
+ICONSET_DIR="$BUILD_DIR/BraiinsRatchet.iconset"
+ICNS_FILE="$RESOURCES_DIR/BraiinsRatchet.icns"
+
+mkdir -p "$BUILD_DIR/home" "$BUILD_DIR/clang-module-cache"
+export HOME="$BUILD_DIR/home"
+export CLANG_MODULE_CACHE_PATH="$BUILD_DIR/clang-module-cache"
+
+cd "$PACKAGE_DIR"
+swift build -c release
+
+EXECUTABLE_PATH="$PACKAGE_DIR/.build/release/$EXECUTABLE_NAME"
+if [[ ! -x "$EXECUTABLE_PATH" ]]; then
+  EXECUTABLE_PATH="$(find "$PACKAGE_DIR/.build" -path "*/release/$EXECUTABLE_NAME" -type f | head -n 1)"
+fi
+
+if [[ -z "${EXECUTABLE_PATH:-}" || ! -x "$EXECUTABLE_PATH" ]]; then
+  echo "Could not find release executable $EXECUTABLE_NAME after swift build." >&2
+  exit 1
+fi
+
+rm -rf "$APP_DIR" "$ICONSET_DIR"
+mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+
+cp "$EXECUTABLE_PATH" "$MACOS_DIR/$EXECUTABLE_NAME"
+chmod +x "$MACOS_DIR/$EXECUTABLE_NAME"
+
+python3 "$ROOT_DIR/scripts/generate_mac_icon.py" "$ICONSET_DIR"
+iconutil -c icns "$ICONSET_DIR" -o "$ICNS_FILE"
+rm -rf "$ICONSET_DIR"
+
+cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>Braiins Ratchet</string>
+  <key>CFBundleExecutable</key>
+  <string>BraiinsRatchetMac</string>
+  <key>CFBundleIconFile</key>
+  <string>BraiinsRatchet</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.saymrwulf.BraiinsRatchet</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>Braiins Ratchet</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1.0</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>15.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+
+touch "$APP_DIR"
+
+echo "$APP_DIR"

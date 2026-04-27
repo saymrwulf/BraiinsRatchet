@@ -52,9 +52,10 @@ Close it only when finished:
 For the native macOS SwiftUI shell:
 
 ```bash
-cd macos/BraiinsRatchet
-swift run BraiinsRatchetMac
+./scripts/ratchet app
 ```
+
+This builds `macos/build/Braiins Ratchet.app` and opens the real app bundle. Do not use `swift run` for normal operation.
 
 For a 6-hour monitoring session:
 

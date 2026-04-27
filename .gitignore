@@ -9,3 +9,4 @@ data/*.sqlite-wal
 data/raw/
 *.log
 macos/BraiinsRatchet/.build/
+macos/build/

@@ -312,14 +312,21 @@ enum AppIconFactory {
 enum RatchetProcess {
     static func run(arguments: [String], input: String? = nil) async -> String {
         await Task.detached {
-            let packageRoot = URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-            let repoRoot = packageRoot
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
+            guard let repoRoot = findRepoRoot() else {
+                return """
+                Braiins Ratchet cannot find its repository.
+
+                Expected to find:
+                  scripts/ratchet
+
+                Start the packaged app through:
+                  ./scripts/ratchet app
+
+                Or open this bundle from inside the BraiinsRatchet repository:
+                  macos/build/Braiins Ratchet.app
+                """
+            }
+
             let script = repoRoot.appendingPathComponent("scripts/ratchet").path
 
             let process = Process()
@@ -347,6 +354,33 @@ enum RatchetProcess {
                 return "Failed to run ratchet command: \(error.localizedDescription)"
             }
         }.value
+    }
+
+    private static func findRepoRoot() -> URL? {
+        let fileManager = FileManager.default
+        let candidates = [
+            URL(fileURLWithPath: #filePath),
+            Bundle.main.bundleURL,
+            URL(fileURLWithPath: fileManager.currentDirectoryPath)
+        ]
+
+        for candidate in candidates {
+            var current = candidate.hasDirectoryPath ? candidate : candidate.deletingLastPathComponent()
+            for _ in 0..<16 {
+                let script = current.appendingPathComponent("scripts/ratchet").path
+                if fileManager.isExecutableFile(atPath: script) {
+                    return current
+                }
+
+                let parent = current.deletingLastPathComponent()
+                if parent.path == current.path {
+                    break
+                }
+                current = parent
+            }
+        }
+
+        return nil
     }
 
     private static func shellQuote(_ value: String) -> String {

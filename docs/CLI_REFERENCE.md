@@ -11,6 +11,8 @@ Most users should use the wrapper:
 
 Use `./scripts/ratchet raw-cycle` only when debugging the machine-readable cycle output.
 
+Use `./scripts/ratchet app` to build and open the packaged native macOS app. It creates `macos/build/Braiins Ratchet.app`; `swift run` is only a developer fallback.
+
 The raw Python CLI is documented below for debugging and development.
 
 All raw commands should be run from the repository root.

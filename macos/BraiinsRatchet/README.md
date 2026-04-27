@@ -4,12 +4,13 @@ Native SwiftUI shell for the durable Braiins Ratchet lifecycle engine.
 
 The Python supervisor remains the source of truth. This app reads the same repository-local SQLite state through `./scripts/ratchet`.
 
-## Run From Source
+## Normal Run
 
 ```bash
-cd macos/BraiinsRatchet
-swift run BraiinsRatchetMac
+./scripts/ratchet app
 ```
+
+This builds `macos/build/Braiins Ratchet.app` and opens the packaged app. Use this path for normal operation.
 
 ## Current Scope
 
@@ -21,4 +22,4 @@ swift run BraiinsRatchetMac
 
 ## Product Direction
 
-The next production step is packaging this SwiftUI shell as a signed `.app` and wiring LaunchAgent controls for the durable supervisor.
+The next production step is wiring LaunchAgent controls for the durable supervisor.

@@ -132,12 +132,13 @@ The native SwiftUI shell is in:
 macos/BraiinsRatchet
 ```
 
-Run it from source:
+Build and open the real app bundle:
 
 ```bash
-cd macos/BraiinsRatchet
-swift run BraiinsRatchetMac
+./scripts/ratchet app
 ```
+
+This creates `macos/build/Braiins Ratchet.app`. After that, you can open that app bundle directly from Finder or pin it in the Dock.
 
 The app is a native cockpit over the same durable Python lifecycle engine.
 

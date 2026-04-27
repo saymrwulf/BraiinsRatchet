@@ -15,6 +15,7 @@ Commands:
   watch [hours]      Run repeated monitor cycles for N hours. Default: 6.
   pipeline           Propose timed automation, then ask yes/no.
   supervise          Run the durable forever lifecycle supervisor.
+  app                Build and open the native macOS app.
   position           Record/list/close manually executed Braiins exposure.
   report             Print the latest stored report without fetching new data.
   experiments        Print the Karpathy-style experiment ledger.
@@ -31,6 +32,7 @@ Examples:
   ./scripts/ratchet watch 6
   ./scripts/ratchet pipeline
   ./scripts/ratchet supervise
+  ./scripts/ratchet app
   ./scripts/ratchet position list
   ./scripts/ratchet report
   ./scripts/ratchet experiments
@@ -119,6 +121,13 @@ cmd_supervise() {
   run_python -m braiins_ratchet.cli supervise "$@"
 }
 
+cmd_app() {
+  local app_path
+  app_path="$("$ROOT_DIR/scripts/build_mac_app" | tail -n 1)"
+  echo "Opening $app_path"
+  open "$app_path"
+}
+
 cmd_position() {
   run_python -m braiins_ratchet.cli position "$@"
 }
@@ -165,6 +174,7 @@ main() {
     watch) cmd_watch "$@" ;;
     pipeline|auto) cmd_pipeline "$@" ;;
     supervise|daemon) cmd_supervise "$@" ;;
+    app|mac-app) cmd_app "$@" ;;
     position|positions) cmd_position "$@" ;;
     report) cmd_report "$@" ;;
     experiments) cmd_experiments "$@" ;;
