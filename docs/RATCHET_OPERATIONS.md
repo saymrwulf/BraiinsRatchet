@@ -58,6 +58,24 @@ During cooldown, the cockpit prints a progress bar, remaining minutes, and the e
 
 The pipeline prints its plan and asks for `yes` or `no` before doing anything. It never places Braiins orders.
 
+## Forever Lifecycle
+
+For unattended monitor-only autoresearch:
+
+```bash
+./scripts/ratchet supervise
+```
+
+The supervisor is stateful. It writes lifecycle state and events into `data/ratchet.sqlite`, so a restart can continue from the current phase instead of starting over.
+
+Check the persisted lifecycle state:
+
+```bash
+./scripts/ratchet supervise --status
+```
+
+This is still monitor-only. Manual Braiins bids remain outside the app unless separately recorded.
+
 If a run already happened before automatic bookkeeping was available, reconstruct it from the stored SQLite snapshots:
 
 ```bash

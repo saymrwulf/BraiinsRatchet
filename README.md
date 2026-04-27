@@ -29,6 +29,21 @@ If the cockpit is in cooldown and you want the app to wait until the earliest ne
 
 It prints the exact monitor-only plan and asks `yes/no` before doing anything.
 
+For the durable forever lifecycle supervisor:
+
+```bash
+./scripts/ratchet supervise
+```
+
+It persists lifecycle state in `data/ratchet.sqlite`. If the process crashes or the Mac reboots, start the same command again and it resumes from SQLite.
+
+For the native macOS SwiftUI shell:
+
+```bash
+cd macos/BraiinsRatchet
+swift run BraiinsRatchetMac
+```
+
 For a 6-hour monitoring session:
 
 ```bash

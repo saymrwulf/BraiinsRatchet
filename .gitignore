@@ -8,3 +8,4 @@ data/*.sqlite-shm
 data/*.sqlite-wal
 data/raw/
 *.log
+macos/BraiinsRatchet/.build/

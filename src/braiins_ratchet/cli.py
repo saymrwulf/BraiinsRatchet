@@ -17,6 +17,7 @@ from .experiments import (
     write_retro_report,
 )
 from .guidance import build_operator_cockpit
+from .lifecycle import render_lifecycle_status, render_supervisor_plan, run_supervisor
 from .monitor import run_cycle
 from .ocean import fetch_snapshot
 from .report import build_text_report
@@ -192,6 +193,22 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_supervise(args: argparse.Namespace) -> int:
+    config = load_config(Path(args.config) if args.config else None)
+    if args.status:
+        with connect() as conn:
+            init_db(conn)
+            print(render_lifecycle_status(conn))
+        return 0
+    print(render_supervisor_plan())
+    if not args.yes:
+        answer = input("> ").strip().lower()
+        if answer not in {"y", "yes"}:
+            print("Supervisor cancelled. No action was taken.")
+            return 0
+    return run_supervisor(config, once=args.once)
+
+
 def cmd_experiments(_: argparse.Namespace) -> int:
     if not EXPERIMENT_LOG.exists():
         print("No experiment log yet. Run ./scripts/ratchet watch 2.")
@@ -327,6 +344,13 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline.add_argument("--config")
     pipeline.add_argument("--yes", action="store_true", help="accept the printed plan without prompting")
     pipeline.set_defaults(func=cmd_pipeline)
+
+    supervise = sub.add_parser("supervise", help="run the durable forever lifecycle supervisor")
+    supervise.add_argument("--config")
+    supervise.add_argument("--yes", action="store_true", help="start without prompting")
+    supervise.add_argument("--once", action="store_true", help="run one supervisor decision then stop")
+    supervise.add_argument("--status", action="store_true", help="print persisted lifecycle status")
+    supervise.set_defaults(func=cmd_supervise)
 
     experiments = sub.add_parser("experiments", help="print the Karpathy-style experiment log")
     experiments.set_defaults(func=cmd_experiments)

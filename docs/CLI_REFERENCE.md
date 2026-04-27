@@ -46,6 +46,22 @@ If approved, it waits until the earliest next action time, runs one fresh monito
 PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli pipeline
 ```
 
+## `supervise`
+
+Runs the durable forever lifecycle supervisor.
+
+```bash
+PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli supervise
+```
+
+Status only:
+
+```bash
+PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli supervise --status
+```
+
+Crash/reboot contract: start `./scripts/ratchet supervise` again and it resumes from persisted SQLite lifecycle state.
+
 ## `init-db`
 
 Creates `data/ratchet.sqlite` if it does not exist.

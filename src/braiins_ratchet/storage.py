@@ -63,6 +63,29 @@ def init_db(conn: sqlite3.Connection) -> None:
             score_btc TEXT NOT NULL,
             maturity_note TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS lifecycle_state (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS lifecycle_events (
+            id INTEGER PRIMARY KEY,
+            timestamp_utc TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            payload_json TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS manual_positions (
+            id INTEGER PRIMARY KEY,
+            opened_utc TEXT NOT NULL,
+            closed_utc TEXT,
+            status TEXT NOT NULL,
+            venue TEXT NOT NULL,
+            description TEXT NOT NULL,
+            expected_maturity_utc TEXT,
+            payload_json TEXT NOT NULL
+        );
         """
     )
     _ensure_market_columns(conn)

@@ -73,6 +73,48 @@ It only runs after you type `yes`.
 
 It is still monitor-only. It never places, changes, or cancels Braiins orders.
 
+## Forever Supervisor
+
+For the full autoresearch lifecycle, run:
+
+```bash
+./scripts/ratchet supervise
+```
+
+The supervisor is the long-running engine. It:
+
+1. Loads persisted state from `data/ratchet.sqlite`.
+2. Waits through cooldown if cooldown is active.
+3. Runs the next passive watch when due.
+4. Writes reports and lifecycle events.
+5. Re-enters cooldown.
+6. Repeats until you stop it.
+
+If it crashes or the Mac reboots, start the same command again. It resumes from SQLite.
+
+Use this to inspect persisted state without starting the loop:
+
+```bash
+./scripts/ratchet supervise --status
+```
+
+## Native Mac App
+
+The native SwiftUI shell is in:
+
+```text
+macos/BraiinsRatchet
+```
+
+Run it from source:
+
+```bash
+cd macos/BraiinsRatchet
+swift run BraiinsRatchetMac
+```
+
+The app is a native cockpit over the same durable Python lifecycle engine.
+
 ## Research Pathway
 
 The cockpit has two different time horizons:

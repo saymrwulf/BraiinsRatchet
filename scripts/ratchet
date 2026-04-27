@@ -14,6 +14,7 @@ Commands:
   once               Fetch one fresh sample, then print the cockpit.
   watch [hours]      Run repeated monitor cycles for N hours. Default: 6.
   pipeline           Propose timed automation, then ask yes/no.
+  supervise          Run the durable forever lifecycle supervisor.
   report             Print the latest stored report without fetching new data.
   experiments        Print the Karpathy-style experiment ledger.
   retro SINCE [UNTIL] Write a retroactive report from stored snapshots.
@@ -28,6 +29,7 @@ Examples:
   ./scripts/ratchet once
   ./scripts/ratchet watch 6
   ./scripts/ratchet pipeline
+  ./scripts/ratchet supervise
   ./scripts/ratchet report
   ./scripts/ratchet experiments
   ./scripts/ratchet retro 2026-04-25T19:08:00+00:00 2026-04-25T21:05:00+00:00
@@ -111,6 +113,10 @@ cmd_pipeline() {
   run_python -m braiins_ratchet.cli pipeline "$@"
 }
 
+cmd_supervise() {
+  run_python -m braiins_ratchet.cli supervise "$@"
+}
+
 cmd_experiments() {
   run_python -m braiins_ratchet.cli experiments
 }
@@ -152,6 +158,7 @@ main() {
     once) cmd_once "$@" ;;
     watch) cmd_watch "$@" ;;
     pipeline|auto) cmd_pipeline "$@" ;;
+    supervise|daemon) cmd_supervise "$@" ;;
     report) cmd_report "$@" ;;
     experiments) cmd_experiments "$@" ;;
     retro) cmd_retro "$@" ;;
