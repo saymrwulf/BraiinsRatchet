@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
 import sqlite3
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from braiins_ratchet.lifecycle import (
     close_manual_position,
@@ -11,6 +13,7 @@ from braiins_ratchet.lifecycle import (
     render_manual_positions,
     render_lifecycle_status,
     render_supervisor_plan,
+    _sync_recent_watch_cooldown,
 )
 
 
@@ -70,6 +73,25 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(close_manual_position(conn, position_id))
         self.assertEqual(list_manual_positions(conn, status="active"), [])
         self.assertEqual(get_lifecycle_status(conn).phase, "idle")
+
+    def test_recent_watch_report_synchronizes_supervisor_cooldown(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        init_lifecycle_db(conn)
+        completed_watch = SimpleNamespace(
+            report_path="reports/run-example.md",
+            remaining_minutes=42,
+            earliest_action_utc="2026-04-28T15:41:51+00:00",
+        )
+        operator_state = SimpleNamespace(completed_watch=completed_watch)
+
+        with patch("braiins_ratchet.lifecycle.get_operator_state", return_value=operator_state):
+            wait_seconds = _sync_recent_watch_cooldown(conn)
+
+        status = get_lifecycle_status(conn)
+        self.assertEqual(wait_seconds, 42 * 60)
+        self.assertEqual(status.phase, "cooldown")
+        self.assertEqual(status.next_action_utc, "2026-04-28T15:41:51+00:00")
+        self.assertIn("recent watch report", status.message)
 
 
 if __name__ == "__main__":

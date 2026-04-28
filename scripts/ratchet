@@ -13,8 +13,8 @@ Commands:
   setup              Create the local .venv and initialize the local database.
   once               Fetch one fresh sample, then print the cockpit.
   watch [hours]      Run repeated monitor cycles for N hours. Default: 6.
-  pipeline           Propose timed automation, then ask yes/no.
   supervise          Run the durable forever lifecycle supervisor.
+  engine             Start/stop/status for the background monitor engine.
   app                Build and open the native macOS app.
   position           Record/list/close manually executed Braiins exposure.
   report             Print the latest stored report without fetching new data.
@@ -31,8 +31,8 @@ Examples:
   ./scripts/ratchet setup
   ./scripts/ratchet once
   ./scripts/ratchet watch 6
-  ./scripts/ratchet pipeline
   ./scripts/ratchet supervise
+  ./scripts/ratchet engine status
   ./scripts/ratchet app
   ./scripts/ratchet position list
   ./scripts/ratchet report
@@ -126,6 +126,10 @@ cmd_supervise() {
   run_python -m braiins_ratchet.cli supervise "$@"
 }
 
+cmd_engine() {
+  run_python -m braiins_ratchet.cli engine "$@"
+}
+
 cmd_app() {
   local app_path
   app_path="$("$ROOT_DIR/scripts/build_mac_app" | tail -n 1)"
@@ -179,6 +183,7 @@ main() {
     watch) cmd_watch "$@" ;;
     pipeline|auto) cmd_pipeline "$@" ;;
     supervise|daemon) cmd_supervise "$@" ;;
+    engine) cmd_engine "$@" ;;
     app|mac-app) cmd_app "$@" ;;
     position|positions) cmd_position "$@" ;;
     report) cmd_report "$@" ;;

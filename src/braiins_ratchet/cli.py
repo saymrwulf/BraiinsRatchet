@@ -18,6 +18,7 @@ from .experiments import (
     summarize_since,
     write_retro_report,
 )
+from .engine import get_engine_status, render_engine_status, start_engine, stop_engine
 from .guidance import build_operator_cockpit, get_operator_state
 from .lifecycle import (
     close_manual_position,
@@ -160,6 +161,7 @@ def cmd_next(_: argparse.Namespace) -> int:
 
 
 def cmd_app_state(_: argparse.Namespace) -> int:
+    config = load_config(None)
     with connect() as conn:
         init_db(conn)
         operator_state = get_operator_state(conn)
@@ -168,11 +170,13 @@ def cmd_app_state(_: argparse.Namespace) -> int:
             "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "operator_state": asdict(operator_state),
             "automation_plan": asdict(automation_plan),
+            "engine_status": asdict(get_engine_status()),
+            "config": asdict(config),
             "cockpit": build_operator_cockpit(conn),
             "latest": {
                 "ocean": _object_dict(latest_ocean_snapshot(conn)),
                 "market": _object_dict(latest_market_snapshot(conn)),
-                "proposal": _object_dict(latest_proposal(conn)),
+                "proposal": _proposal_dict(latest_proposal(conn)),
             },
         }
     print(json.dumps(payload, default=str, indent=2))
@@ -330,6 +334,17 @@ def cmd_guardrails(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_engine(args: argparse.Namespace) -> int:
+    if args.engine_command == "start":
+        status = start_engine()
+    elif args.engine_command == "stop":
+        status = stop_engine()
+    else:
+        status = get_engine_status()
+    print(render_engine_status(status))
+    return 0
+
+
 def _proposal_json(proposal: object) -> str:
     def default(value: object) -> object:
         if hasattr(value, "__dict__"):
@@ -343,6 +358,22 @@ def _object_dict(value: object | None) -> dict[str, object] | None:
     if value is None:
         return None
     return dict(value.__dict__) if hasattr(value, "__dict__") else {"value": str(value)}
+
+
+def _proposal_dict(value: object | None) -> dict[str, object] | None:
+    if value is None or not hasattr(value, "__dict__"):
+        return None
+    payload = dict(value.__dict__)
+    order = payload.get("order")
+    if order is not None and hasattr(order, "__dict__"):
+        order_payload = dict(order.__dict__)
+        payload["order"] = order_payload
+        payload["order_price_btc_per_eh_day"] = order_payload.get("price_btc_per_eh_day")
+        payload["order_spend_btc"] = order_payload.get("spend_btc")
+        payload["order_duration_minutes"] = order_payload.get("duration_minutes")
+        payload["order_objective"] = order_payload.get("objective")
+        payload["order_implied_hashrate_eh_s"] = order.implied_hashrate_eh_s
+    return payload
 
 
 def _run_one_fresh_cycle(config: object) -> None:
@@ -462,6 +493,13 @@ def build_parser() -> argparse.ArgumentParser:
     guardrails = sub.add_parser("guardrails", help="print active guardrails")
     guardrails.add_argument("--config")
     guardrails.set_defaults(func=cmd_guardrails)
+
+    engine = sub.add_parser("engine", help="manage the monitor-only forever engine")
+    engine_sub = engine.add_subparsers(dest="engine_command")
+    engine_sub.add_parser("status", help="show engine status")
+    engine_sub.add_parser("start", help="start the monitor-only forever engine")
+    engine_sub.add_parser("stop", help="stop the monitor-only forever engine")
+    engine.set_defaults(func=cmd_engine, engine_command="status")
 
     return parser
 

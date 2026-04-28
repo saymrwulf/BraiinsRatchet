@@ -22,6 +22,8 @@ This builds and opens the native macOS control room. Use the app for normal oper
 
 The lifecycle state persists in `data/ratchet.sqlite`. If the app or Mac restarts, open the app again and it reads the same state.
 
+Inside the app, the preferred non-babysitting path is `Start Forever Engine`. It starts the monitor-only lifecycle engine in the background, writes logs under `logs/`, persists state under `data/`, and never places Braiins orders.
+
 When you manually place a Braiins bid, record the exposure so the supervisor blocks new experiments:
 
 ```bash
@@ -42,12 +44,20 @@ For the native macOS app:
 
 This builds `macos/build/Braiins Ratchet.app` and opens the real app bundle. Do not use `swift run` for normal operation.
 
-The app is a native visual control room: Mission Control, Research Map, Manual Exposure ledger, Advanced diagnostics, and a Ratchet Lecture. The design rationale is in `docs/APP_DESIGN_RESEARCH.md`.
+The app is a native visual control room: Mission Control, Mining Stack, Ratchet, Strategy Lab, Manual Exposure, and Evidence Vault. The design rationale is in `docs/APP_DESIGN_RESEARCH.md`.
 
 Advanced fallback for a 6-hour CLI monitoring session:
 
 ```bash
 ./scripts/ratchet watch 6
+```
+
+Advanced fallback for the background monitor engine:
+
+```bash
+./scripts/ratchet engine status
+./scripts/ratchet engine start
+./scripts/ratchet engine stop
 ```
 
 Every completed watch is now treated as a ratchet experiment. It writes a run report under `reports/run-*.md` and appends the master ledger at `reports/EXPERIMENT_LOG.md`.

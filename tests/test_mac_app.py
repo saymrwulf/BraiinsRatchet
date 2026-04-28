@@ -15,12 +15,16 @@ class MacAppPackagingTest(unittest.TestCase):
         self.assertIn("app|mac-app", text)
         self.assertIn("cmd_app", text)
         self.assertIn("app-state", text)
+        self.assertIn("engine", text)
         self.assertNotIn("swift run BraiinsRatchetMac", text)
 
     def test_python_cli_exposes_structured_app_state(self):
         args = build_parser().parse_args(["app-state"])
 
         self.assertEqual(args.func.__name__, "cmd_app_state")
+
+        engine_args = build_parser().parse_args(["engine", "status"])
+        self.assertEqual(engine_args.func.__name__, "cmd_engine")
 
     def test_mac_app_builder_creates_bundle_contract(self):
         builder = ROOT / "scripts" / "build_mac_app"
@@ -51,7 +55,11 @@ class MacAppPackagingTest(unittest.TestCase):
         self.assertIn("This project now has one normal operator entry point", text)
         self.assertIn("./scripts/ratchet app", text)
         self.assertIn("The app is the control room", text)
-        self.assertIn("Who Is In Control", text)
+        self.assertIn("Who Owns Control", text)
+        self.assertIn("Start Forever Engine", text)
+        self.assertIn("Mining Stack", text)
+        self.assertIn("Strategy Lab", text)
+        self.assertIn("Evidence Vault", text)
         self.assertNotIn("Controlled Automation", text)
         self.assertNotIn("./scripts/ratchet pipeline", text)
 
@@ -61,14 +69,17 @@ class MacAppPackagingTest(unittest.TestCase):
 
         self.assertIn("NavigationSplitView", text)
         self.assertIn("MissionControlView", text)
-        self.assertIn("ResearchTimeline", text)
-        self.assertIn("AutoresearchOrb", text)
+        self.assertIn("MiningStackView", text)
+        self.assertIn("RatchetPathView", text)
+        self.assertIn("StrategyLabView", text)
+        self.assertIn("EvidenceVaultView", text)
         self.assertIn("AppStatePayload", text)
+        self.assertIn("EngineStatusPayload", text)
         self.assertIn("loadAppState", text)
-        self.assertIn("PassiveRunCard", text)
-        self.assertIn("ControlOwnershipCard", text)
-        self.assertIn("EvidenceDeck", text)
-        self.assertIn("AdvancedView", text)
+        self.assertIn("Start Forever Engine", text)
+        self.assertIn("Who Owns Control", text)
+        self.assertIn("Mining Stack", text)
+        self.assertIn("Strategy Lab", text)
         self.assertIn("Current Decision", text)
         self.assertNotIn("Do This Now", text)
         self.assertNotIn("Automation Gate", text)

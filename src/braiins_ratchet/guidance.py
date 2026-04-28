@@ -127,7 +127,7 @@ def build_operator_cockpit(conn) -> str:
             "  ./scripts/ratchet next         # read this cockpit",
             "  ./scripts/ratchet once         # fetch one fresh sample and report",
             "  ./scripts/ratchet watch 2      # run a bounded 2-hour experiment",
-            "  ./scripts/ratchet pipeline     # propose automation, then ask yes/no",
+            "  ./scripts/ratchet engine start # start the monitor-only forever engine",
             "  ./scripts/ratchet experiments  # read the experiment ledger",
             "  ./scripts/ratchet report       # read the latest raw human report",
         ]

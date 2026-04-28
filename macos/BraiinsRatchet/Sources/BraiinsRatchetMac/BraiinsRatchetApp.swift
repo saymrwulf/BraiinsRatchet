@@ -10,458 +10,462 @@ struct BraiinsRatchetApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .frame(minWidth: 1120, minHeight: 760)
+            AppRootView()
+                .frame(minWidth: 1180, minHeight: 780)
         }
         .windowStyle(.hiddenTitleBar)
     }
 }
 
-struct ContentView: View {
-    @State private var selectedSection: AppSection? = .mission
-    @State private var appState: AppStatePayload?
-    @State private var transcript = "Loading native app state..."
-    @State private var lastCommand = "app-state"
-    @State private var errorMessage: String?
-    @State private var isRunning = false
-    @State private var glow = false
-    @State private var manualDescription = ""
-    @State private var maturityHours = "72"
-    @State private var closePositionId = ""
+@MainActor
+final class RatchetStore: ObservableObject {
+    @Published var appState: AppStatePayload?
+    @Published var rawText = "Loading Braiins Ratchet state..."
+    @Published var rawTitle = "App State"
+    @Published var operation: String?
+    @Published var errorMessage: String?
+    @Published var manualDescription = ""
+    @Published var maturityHours = "72"
+    @Published var closePositionId = ""
 
-    var body: some View {
-        NavigationSplitView {
-            List(AppSection.allCases, selection: $selectedSection) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .tag(section as AppSection?)
-                    .padding(.vertical, 4)
-            }
-            .navigationTitle("Ratchet")
-            .safeAreaInset(edge: .bottom) {
-                sidebarFooter
-            }
-        } detail: {
-            ZStack {
-                AppBackground(glow: glow)
-                detailView
-            }
-            .toolbar {
-                ToolbarItemGroup {
-                    Button {
-                        Task { await refreshAppState() }
-                    } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(isRunning)
+    var isWorking: Bool { operation != nil }
 
-                    Button {
-                        Task { await runTextCommand(label: "supervise --status", ["supervise", "--status"]) }
-                    } label: {
-                        Label("Supervisor", systemImage: "waveform.path.ecg")
-                    }
-                    .disabled(isRunning)
-                }
-            }
-        }
-        .task {
-            await refreshAppState()
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) {
-                glow = true
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var detailView: some View {
-        switch selectedSection ?? .mission {
-        case .mission:
-            MissionControlView(
-                appState: appState,
-                isRunning: isRunning,
-                glow: glow,
-                refresh: { Task { await refreshAppState() } },
-                runPassiveAction: runPassiveAction
-            )
-        case .map:
-            ResearchMapView(appState: appState, glow: glow)
-        case .exposure:
-            ManualExposureView(
-                appState: appState,
-                manualDescription: $manualDescription,
-                maturityHours: $maturityHours,
-                closePositionId: $closePositionId,
-                isRunning: isRunning,
-                record: recordManualExposure,
-                close: closeManualExposure,
-                list: { Task { await runTextCommand(label: "position list", ["position", "list"], refreshAfterwards: true) } }
-            )
-        case .advanced:
-            AdvancedView(
-                transcript: transcript,
-                lastCommand: lastCommand,
-                isRunning: isRunning,
-                loadReport: { Task { await runTextCommand(label: "report", ["report"]) } },
-                loadLedger: { Task { await runTextCommand(label: "experiments", ["experiments"]) } },
-                loadCockpit: { Task { await runTextCommand(label: "next", ["next"]) } }
-            )
-        case .lecture:
-            RatchetLectureView()
-        }
-    }
-
-    private var sidebarFooter: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Image(nsImage: AppIconFactory.makeIcon(size: 34))
-                    .resizable()
-                    .frame(width: 34, height: 34)
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Monitor-only")
-                        .font(.caption.weight(.bold))
-                    Text("No owner-token execution")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if isRunning {
-                ProgressView("Working")
-                    .controlSize(.small)
-            }
-        }
-        .padding(12)
-    }
-
-    @MainActor
-    private func refreshAppState() async {
-        isRunning = true
-        errorMessage = nil
-        lastCommand = "app-state"
+    func refresh() async {
+        operation = "Refreshing state"
+        rawTitle = "App State"
         let result = await RatchetProcess.loadAppState()
         switch result {
         case .success(let payload):
             appState = payload
-            transcript = payload.cockpit
+            rawText = payload.cockpit
+            errorMessage = nil
         case .failure(let message):
             errorMessage = message
-            transcript = message
+            rawText = message
         }
-        isRunning = false
+        operation = nil
     }
 
-    @MainActor
-    private func runTextCommand(
-        label: String,
-        _ arguments: [String],
-        input: String? = nil,
-        refreshAfterwards: Bool = false
-    ) async {
-        isRunning = true
-        lastCommand = label
-        transcript = "Running ./scripts/ratchet \(arguments.joined(separator: " ")) ..."
-        let result = await RatchetProcess.run(arguments: arguments, input: input)
-        transcript = result
-        isRunning = false
-        if refreshAfterwards {
-            await refreshAppState()
-        }
+    func runOneFreshSample() async {
+        await run(label: "Fresh Sample", arguments: ["once"], refreshAfterwards: true)
     }
 
-    private func recordManualExposure() {
+    func runOnePassiveWatch() async {
+        await run(label: "Passive Watch", arguments: ["watch", "2"], refreshAfterwards: true)
+    }
+
+    func startEngine() async {
+        await run(label: "Start Forever Engine", arguments: ["engine", "start"], refreshAfterwards: true)
+    }
+
+    func stopEngine() async {
+        await run(label: "Stop Forever Engine", arguments: ["engine", "stop"], refreshAfterwards: true)
+    }
+
+    func showEngineStatus() async {
+        await run(label: "Engine Status", arguments: ["engine", "status"], refreshAfterwards: true)
+    }
+
+    func showReport() async {
+        await run(label: "Latest Report", arguments: ["report"], refreshAfterwards: false)
+    }
+
+    func showLedger() async {
+        await run(label: "Experiment Ledger", arguments: ["experiments"], refreshAfterwards: false)
+    }
+
+    func showCockpit() async {
+        await run(label: "Raw Cockpit", arguments: ["next"], refreshAfterwards: false)
+    }
+
+    func recordManualExposure() async {
         let description = manualDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let hours = maturityHours.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !description.isEmpty else {
-            transcript = "Enter a manual exposure description first."
+            errorMessage = "Enter a Braiins exposure description first."
             return
         }
-
-        Task {
-            await runTextCommand(
-                label: "position open",
-                ["position", "open", "--description", description, "--maturity-hours", hours.isEmpty ? "72" : hours],
-                refreshAfterwards: true
-            )
-        }
+        await run(
+            label: "Record Exposure",
+            arguments: [
+                "position", "open",
+                "--description", description,
+                "--maturity-hours", hours.isEmpty ? "72" : hours
+            ],
+            refreshAfterwards: true
+        )
+        manualDescription = ""
     }
 
-    private func closeManualExposure() {
+    func closeManualExposure() async {
         let positionId = closePositionId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !positionId.isEmpty else {
-            transcript = "Enter a manual position ID first."
+            errorMessage = "Enter a manual position ID first."
             return
         }
-
-        Task {
-            await runTextCommand(label: "position close", ["position", "close", positionId], refreshAfterwards: true)
-        }
+        await run(
+            label: "Close Exposure",
+            arguments: ["position", "close", positionId],
+            refreshAfterwards: true
+        )
+        closePositionId = ""
     }
 
-    private func runPassiveAction() {
-        guard let plan = appState?.automationPlan else {
-            Task { await refreshAppState() }
-            return
+    private func run(label: String, arguments: [String], refreshAfterwards: Bool) async {
+        operation = label
+        rawTitle = label
+        rawText = "\(label) is running..."
+        let result = await RatchetProcess.run(arguments: arguments)
+        rawText = result
+        errorMessage = nil
+        operation = nil
+        if refreshAfterwards {
+            await refresh()
         }
+    }
+}
 
-        switch plan.kind {
-        case "once_now":
-            Task { await runTextCommand(label: "once", ["once"], refreshAfterwards: true) }
-        case "watch_2h":
-            Task { await runTextCommand(label: "watch 2", ["watch", "2"], refreshAfterwards: true) }
-        case "wait_then_once" where plan.waitSeconds <= 0:
-            Task { await runTextCommand(label: "once", ["once"], refreshAfterwards: true) }
-        case "report_only":
-            Task { await runTextCommand(label: "report", ["report"]) }
-        default:
-            Task { await refreshAppState() }
+struct AppRootView: View {
+    @StateObject private var store = RatchetStore()
+    @State private var selection: AppSection? = .mission
+    @State private var animate = false
+
+    var body: some View {
+        NavigationSplitView {
+            Sidebar(selection: $selection, store: store)
+        } detail: {
+            ZStack {
+                AppBackdrop(animate: animate)
+                Group {
+                    switch selection ?? .mission {
+                    case .mission:
+                        MissionControlView(store: store)
+                    case .stack:
+                        MiningStackView(store: store)
+                    case .ratchet:
+                        RatchetPathView(store: store)
+                    case .strategy:
+                        StrategyLabView(store: store)
+                    case .exposure:
+                        ManualExposureView(store: store)
+                    case .vault:
+                        EvidenceVaultView(store: store)
+                    }
+                }
+            }
+            .toolbar {
+                ToolbarItemGroup {
+                    Button {
+                        Task { await store.refresh() }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(store.isWorking)
+
+                    Button {
+                        Task { await store.showEngineStatus() }
+                    } label: {
+                        Label("Engine", systemImage: "dot.radiowaves.left.and.right")
+                    }
+                    .disabled(store.isWorking)
+                }
+            }
+        }
+        .task {
+            await store.refresh()
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 5).repeatForever(autoreverses: true)) {
+                animate = true
+            }
         }
     }
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
     case mission
-    case map
+    case stack
+    case ratchet
+    case strategy
     case exposure
-    case advanced
-    case lecture
+    case vault
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .mission: "Mission Control"
-        case .map: "Research Map"
+        case .stack: "Mining Stack"
+        case .ratchet: "Ratchet"
+        case .strategy: "Strategy Lab"
         case .exposure: "Manual Exposure"
-        case .advanced: "Advanced"
-        case .lecture: "Ratchet Lecture"
+        case .vault: "Evidence Vault"
         }
     }
 
-    var systemImage: String {
+    var subtitle: String {
+        switch self {
+        case .mission: "what to do, when, and why"
+        case .stack: "Umbrel, Knots, Datum, OCEAN, Braiins"
+        case .ratchet: "learning loop and future path"
+        case .strategy: "shadow bids and loss bounds"
+        case .exposure: "real manual positions"
+        case .vault: "reports and raw diagnostics"
+        }
+    }
+
+    var symbol: String {
         switch self {
         case .mission: "scope"
-        case .map: "point.3.connected.trianglepath.dotted"
+        case .stack: "point.3.connected.trianglepath.dotted"
+        case .ratchet: "arrow.triangle.2.circlepath"
+        case .strategy: "chart.xyaxis.line"
         case .exposure: "lock.shield"
-        case .advanced: "wrench.and.screwdriver"
-        case .lecture: "graduationcap"
+        case .vault: "archivebox"
+        }
+    }
+}
+
+struct Sidebar: View {
+    @Binding var selection: AppSection?
+    @ObservedObject var store: RatchetStore
+
+    var body: some View {
+        List(AppSection.allCases, selection: $selection) { section in
+            NavigationLink(value: section) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(section.title)
+                            .font(.headline)
+                        Text(section.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: section.symbol)
+                }
+            }
+            .tag(section as AppSection?)
+        }
+        .navigationTitle("Ratchet")
+        .safeAreaInset(edge: .bottom) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(nsImage: AppIconFactory.makeIcon(size: 38))
+                        .resizable()
+                        .frame(width: 38, height: 38)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(store.appState?.engineStatus.running == true ? "Engine running" : "Engine stopped")
+                            .font(.caption.weight(.bold))
+                        Text("monitor-only")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let operation = store.operation {
+                    ProgressView(operation)
+                        .controlSize(.small)
+                }
+            }
+            .padding(12)
         }
     }
 }
 
 struct MissionControlView: View {
-    let appState: AppStatePayload?
-    let isRunning: Bool
-    let glow: Bool
-    let refresh: () -> Void
-    let runPassiveAction: () -> Void
+    @ObservedObject var store: RatchetStore
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                HStack(alignment: .top, spacing: 22) {
-                    HeroPanel(appState: appState, glow: glow)
-                        .frame(minWidth: 420)
+                MissionHero(store: store)
 
-                    VStack(spacing: 14) {
-                        AutoresearchOrb(phase: ResearchPhase.from(appState), glow: glow)
-                            .frame(height: 250)
-                        ControlOwnershipCard(appState: appState, isRunning: isRunning)
-                        PassiveRunCard(
-                            plan: appState?.automationPlan,
-                            isRunning: isRunning,
-                            run: runPassiveAction
-                        )
-                    }
-                    .frame(width: 350)
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    ControlOwnerCard(store: store)
+                    NextActionCard(store: store)
                 }
 
-                EvidenceDeck(appState: appState)
-                ResearchTimeline(appState: appState, compact: false)
-                PlainEnglishCard(appState: appState)
+                EvidenceStrip(appState: store.appState)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    CenterOfAttentionCard(
+                        number: "1",
+                        title: "UX first",
+                        text: "The app must tell you what is happening without making you parse logs or babysit terminals.",
+                        symbol: "rectangle.3.group"
+                    )
+                    CenterOfAttentionCard(
+                        number: "2",
+                        title: "Ratchet second",
+                        text: "Every run is evidence. The system blocks fake progress and changes only one knob after maturity.",
+                        symbol: "arrow.triangle.2.circlepath"
+                    )
+                    CenterOfAttentionCard(
+                        number: "3",
+                        title: "Mining stack third",
+                        text: "Braiins price, OCEAN luck/window, Datum routing, Knots validation, and Umbrel operations are one system.",
+                        symbol: "cpu"
+                    )
+                }
             }
             .padding(28)
         }
     }
 }
 
-struct HeroPanel: View {
-    let appState: AppStatePayload?
-    let glow: Bool
+struct MissionHero: View {
+    @ObservedObject var store: RatchetStore
 
-    private var directive: Directive {
-        Directive.from(appState)
+    private var decision: Decision {
+        Decision.from(store.appState, isWorking: store.isWorking)
     }
 
     var body: some View {
-        GlassPanel {
-            VStack(alignment: .leading, spacing: 22) {
-                HStack(spacing: 12) {
-                    Image(nsImage: AppIconFactory.makeIcon(size: 46))
-                        .resizable()
-                        .frame(width: 46, height: 46)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Braiins Ratchet")
-                            .font(.largeTitle.weight(.black))
-                        Text("Autoresearch control room for real-money mining experiments")
-                            .font(.callout)
+        HeroSurface {
+            HStack(alignment: .top, spacing: 24) {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack(spacing: 14) {
+                        Image(nsImage: AppIconFactory.makeIcon(size: 58))
+                            .resizable()
+                            .frame(width: 58, height: 58)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Braiins Ratchet")
+                                .font(.system(size: 42, weight: .black, design: .rounded))
+                            Text("Native autoresearch cockpit for buying hashpower smarter")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Current Decision")
+                            .font(.caption.weight(.heavy))
+                            .textCase(.uppercase)
                             .foregroundStyle(.secondary)
+                        Text(decision.title)
+                            .font(.system(size: 56, weight: .black, design: .rounded))
+                            .foregroundStyle(decision.color)
+                        Text(decision.explanation)
+                            .font(.title3.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    SafetyRow()
+                }
+
+                Spacer(minLength: 20)
+
+                VStack(spacing: 16) {
+                    PhaseOrb(phase: ResearchPhase.from(store.appState), running: store.appState?.engineStatus.running == true)
+                        .frame(width: 230, height: 230)
+
+                    if let watch = store.appState?.operatorState.completedWatch {
+                        CooldownRing(watch: watch)
+                    } else {
+                        EngineBadge(status: store.appState?.engineStatus)
                     }
                 }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Current Decision")
-                        .font(.caption.weight(.heavy))
-                        .textCase(.uppercase)
-                        .foregroundStyle(.secondary)
-                    Text(directive.title)
-                        .font(.system(size: 44, weight: .black, design: .rounded))
-                        .foregroundStyle(directive.color)
-                    Text(directive.detail)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.primary)
-                }
-
-                if let watch = appState?.operatorState.completedWatch {
-                    CooldownGauge(watch: watch)
-                }
-
-                SafetyStrip()
+                .frame(width: 280)
             }
         }
     }
 }
 
-struct ControlOwnershipCard: View {
-    let appState: AppStatePayload?
-    let isRunning: Bool
+struct ControlOwnerCard: View {
+    @ObservedObject var store: RatchetStore
+
+    private var owner: ControlOwner {
+        ControlOwner.from(store.appState, isWorking: store.isWorking)
+    }
 
     var body: some View {
-        GlassPanel(padding: 16) {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("Who Is In Control", systemImage: symbol)
-                    .font(.headline)
-                Text(title)
-                    .font(.title3.weight(.bold))
-                Text(detail)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private var symbol: String {
-        if isRunning { return "gearshape.2" }
-        guard let state = appState?.operatorState else { return "questionmark.circle" }
-        if state.activeWatch != nil { return "binoculars" }
-        if !state.activeManualPositions.isEmpty { return "lock.shield" }
-        if state.completedWatch != nil { return "timer" }
-        return "scope"
-    }
-
-    private var title: String {
-        if isRunning { return "The app is busy" }
-        guard let state = appState?.operatorState else { return "Loading state" }
-        if state.activeWatch != nil { return "A watch run owns control" }
-        if !state.activeManualPositions.isEmpty { return "Manual exposure owns control" }
-        if state.completedWatch != nil { return "Cooldown owns control" }
-        return "The app is ready"
-    }
-
-    private var detail: String {
-        if isRunning { return "A monitor-only operation is running. Do not start a competing action." }
-        guard let state = appState?.operatorState else { return "Reading the lifecycle database." }
-        if state.activeWatch != nil { return "Let the watch finish; duplicate watches corrupt the research trail." }
-        if !state.activeManualPositions.isEmpty { return "A real-world position is active, so new experiments stay blocked." }
-        if let watch = state.completedWatch { return "Wait until \(watch.earliestActionLocal) before the next useful sample." }
-        return "No active watch, no manual exposure, and no cooldown block."
-    }
-}
-
-struct PassiveRunCard: View {
-    let plan: AutomationPlanPayload?
-    let isRunning: Bool
-    let run: () -> Void
-
-    var body: some View {
-        GlassPanel {
+        Card {
             VStack(alignment: .leading, spacing: 14) {
-                Label("Next Passive Action", systemImage: "arrow.forward.circle")
+                Label("Who Owns Control", systemImage: owner.symbol)
                     .font(.headline)
-                Text(title)
-                    .font(.title3.weight(.bold))
-                Text(detail)
+                Text(owner.title)
+                    .font(.system(size: 30, weight: .black, design: .rounded))
+                Text(owner.detail)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
 
-                Button(buttonTitle) {
-                    run()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canRun || isRunning)
+struct NextActionCard: View {
+    @ObservedObject var store: RatchetStore
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("No owner-token order placement", systemImage: "lock")
-                    Label("Manual Braiins actions stay outside the app", systemImage: "hand.point.up.left")
-                    Label("Watch runs only collect public/OCEAN data", systemImage: "antenna.radiowaves.left.and.right")
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("Next Useful Action", systemImage: "arrow.forward.circle")
+                    .font(.headline)
+                Text(nextTitle)
+                    .font(.system(size: 30, weight: .black, design: .rounded))
+                Text(nextDetail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    if store.appState?.engineStatus.running == true {
+                        Button("Stop Forever Engine") {
+                            Task { await store.stopEngine() }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(store.isWorking)
+                    } else {
+                        Button("Start Forever Engine") {
+                            Task { await store.startEngine() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(engineStartBlocked || store.isWorking)
+                    }
+
+                    Button(passiveButtonTitle) {
+                        Task { await runPassiveAction() }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!canRunPassive || store.isWorking)
                 }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
             }
         }
     }
 
-    private var title: String {
-        guard let plan else { return "Load state" }
-        switch plan.kind {
-        case "once_now": return "Refresh one sample"
-        case "watch_2h": return "Start passive 2-hour watch"
-        case "wait_then_once": return plan.waitSeconds > 0 ? "Cooldown in progress" : "Cooldown complete"
-        case "report_only": return "Read report"
-        case "external_wait": return "Existing watch owns control"
-        case "manual_exposure_hold": return "Manual exposure hold"
-        default: return "No passive action"
-        }
+    private var nextTitle: String {
+        guard let state = store.appState else { return "Load state" }
+        if state.engineStatus.running { return "Let the engine work" }
+        if state.operatorState.completedWatch != nil { return "Wait for cooldown" }
+        if state.operatorState.activeWatch != nil { return "Wait for watch" }
+        if !state.operatorState.activeManualPositions.isEmpty { return "Hold exposure" }
+        return state.automationPlan.title
     }
 
-    private var detail: String {
-        guard let plan else { return "The app is reading the lifecycle state." }
-        switch plan.kind {
-        case "once_now":
-            return "This collects exactly one fresh monitor sample, then stops."
-        case "watch_2h":
-            return "This starts one bounded watch-only run. It does not spend BTC or place Braiins orders."
-        case "wait_then_once":
-            if plan.waitSeconds > 0 {
-                return "The previous watch is still maturing. Do not run another identical watch yet."
-            }
-            return "The cooldown has ended; one fresh sample is now useful."
-        case "report_only":
-            return "The next useful step is reading the full report."
-        case "external_wait":
-            return "A watch is already running elsewhere. Starting another one would create duplicate state."
-        case "manual_exposure_hold":
-            return "A real manual position is active. The app should supervise, not create new experiments."
-        default:
-            return "No watch-only action is useful right now."
+    private var nextDetail: String {
+        guard let state = store.appState else { return "The app is reading SQLite and latest reports." }
+        if state.engineStatus.running {
+            return "The forever monitor engine will wait, sample, watch, write evidence, and re-enter cooldown without terminal babysitting."
         }
+        if let watch = state.operatorState.completedWatch {
+            return "Earliest next action: \(watch.earliestActionLocal). Starting another identical watch before then is loop-chasing."
+        }
+        if !state.operatorState.activeManualPositions.isEmpty {
+            return "A real-world Braiins/OCEAN position is active. New experiments stay blocked until you close it."
+        }
+        return state.automationPlan.steps.first ?? "No passive action is useful right now."
     }
 
-    private var buttonTitle: String {
-        guard let plan else { return "Refresh State" }
-        switch plan.kind {
-        case "once_now": return "Refresh Now"
-        case "watch_2h": return "Start Watch-only Run"
-        case "wait_then_once": return plan.waitSeconds > 0 ? "Cooldown Active" : "Refresh Now"
-        case "report_only": return "Open Report"
-        default: return "Refresh State"
-        }
+    private var engineStartBlocked: Bool {
+        guard let state = store.appState else { return false }
+        return state.operatorState.activeWatch != nil || !state.operatorState.activeManualPositions.isEmpty
     }
 
-    private var canRun: Bool {
-        guard let plan else { return true }
+    private var canRunPassive: Bool {
+        guard let plan = store.appState?.automationPlan else { return false }
         switch plan.kind {
         case "once_now", "watch_2h", "report_only":
             return true
@@ -471,92 +475,824 @@ struct PassiveRunCard: View {
             return false
         }
     }
+
+    private var passiveButtonTitle: String {
+        guard let plan = store.appState?.automationPlan else { return "Refresh" }
+        switch plan.kind {
+        case "once_now": return "One Fresh Sample"
+        case "watch_2h": return "One Watch"
+        case "wait_then_once": return plan.waitSeconds > 0 ? "Cooling Down" : "One Fresh Sample"
+        case "report_only": return "Open Report"
+        default: return "No Passive Step"
+        }
+    }
+
+    private func runPassiveAction() async {
+        guard let plan = store.appState?.automationPlan else {
+            await store.refresh()
+            return
+        }
+        switch plan.kind {
+        case "once_now":
+            await store.runOneFreshSample()
+        case "watch_2h":
+            await store.runOnePassiveWatch()
+        case "wait_then_once" where plan.waitSeconds <= 0:
+            await store.runOneFreshSample()
+        case "report_only":
+            await store.showReport()
+        default:
+            await store.refresh()
+        }
+    }
 }
 
-struct EvidenceDeck: View {
+struct EvidenceStrip: View {
     let appState: AppStatePayload?
 
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 14) {
-            MetricTile(
-                title: "Braiins Market",
-                value: marketPrice,
-                detail: marketDetail,
-                symbol: "chart.line.uptrend.xyaxis"
+            MetricCard(
+                title: "Braiins Fill Price",
+                value: market("fillable_price_btc_per_eh_day", fallback: market("best_ask_btc_per_eh_day")),
+                detail: "best ask \(market("best_ask_btc_per_eh_day"))",
+                symbol: "bitcoinsign.circle"
             )
-            MetricTile(
-                title: "Model Net",
-                value: proposalValue("expected_net_btc", fallback: "n/a"),
-                detail: actionDetail,
-                symbol: "plus.forwardslash.minus"
-            )
-            MetricTile(
+            MetricCard(
                 title: "OCEAN Pool",
-                value: oceanValue("pool_hashrate_eh_s", suffix: " EH/s"),
-                detail: oceanValue("network_difficulty_t", prefix: "difficulty "),
+                value: "\(ocean("pool_hashrate_eh_s")) EH/s",
+                detail: "difficulty \(ocean("network_difficulty_t")) T",
                 symbol: "water.waves"
             )
-            MetricTile(
+            MetricCard(
+                title: "Model Net",
+                value: sats(proposal("expected_net_btc")),
+                detail: "BTC \(proposal("expected_net_btc"))",
+                symbol: "plus.forwardslash.minus"
+            )
+            MetricCard(
                 title: "Evidence",
-                value: evidenceValue,
-                detail: evidenceDetail,
-                symbol: "archivebox"
+                value: appState?.operatorState.latestReport?.lastPathComponent ?? "none",
+                detail: freshnessText,
+                symbol: "doc.text.magnifyingglass"
             )
         }
     }
 
-    private var marketPrice: String {
-        if let fillable = appState?.latest.market?["fillable_price_btc_per_eh_day"]?.description, fillable != "n/a" {
-            return fillable
-        }
-        return appState?.latest.market?["best_ask_btc_per_eh_day"]?.description ?? "n/a"
+    private var freshnessText: String {
+        guard let minutes = appState?.operatorState.freshnessMinutes else { return "no sample age" }
+        return minutes <= 30 ? "fresh, \(minutes)m old" : "stale, \(minutes)m old"
     }
 
-    private var marketDetail: String {
-        let freshness = appState?.operatorState.freshnessMinutes.map { "\($0)m old" } ?? "age unknown"
-        let ask = appState?.latest.market?["best_ask_btc_per_eh_day"]?.description ?? "n/a"
-        let last = appState?.latest.market?["last_price_btc_per_eh_day"]?.description ?? "n/a"
-        return "\(freshness), ask \(ask), last \(last)"
+    private func market(_ key: String, fallback: String = "n/a") -> String {
+        appState?.latest.market?[key]?.description ?? fallback
     }
 
-    private var actionDetail: String {
-        guard let action = appState?.operatorState.action else { return "No proposal loaded" }
-        if action == "manual_canary" { return "Learning opportunity, not profit proof" }
-        if action == "manual_bid" { return "Profit-seeking signal; manual review required" }
-        return "No useful market action"
+    private func ocean(_ key: String) -> String {
+        appState?.latest.ocean?[key]?.description ?? "n/a"
     }
 
-    private var evidenceValue: String {
-        let count = appState?.operatorState.activeManualPositions.count ?? 0
-        if count > 0 { return "\(count) active exposure" }
-        return appState?.operatorState.latestReport?.lastPathComponent ?? "none"
-    }
-
-    private var evidenceDetail: String {
-        if let watch = appState?.operatorState.completedWatch {
-            return "cooldown \(watch.remainingMinutes)m remaining"
-        }
-        return appState?.operatorState.latestReport ?? "No artifact yet"
-    }
-
-    private func proposalValue(_ key: String, fallback: String) -> String {
-        appState?.latest.proposal?[key]?.description ?? fallback
-    }
-
-    private func oceanValue(_ key: String, prefix: String = "", suffix: String = "") -> String {
-        guard let value = appState?.latest.ocean?[key]?.description else { return "n/a" }
-        return "\(prefix)\(value)\(suffix)"
+    private func proposal(_ key: String) -> String {
+        appState?.latest.proposal?[key]?.description ?? "n/a"
     }
 }
 
-struct MetricTile: View {
+struct CenterOfAttentionCard: View {
+    let number: String
+    let title: String
+    let text: String
+    let symbol: String
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(number)
+                        .font(.title.weight(.black))
+                        .foregroundStyle(.white)
+                        .frame(width: 46, height: 46)
+                        .background(.green.gradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    Spacer()
+                    Image(systemName: symbol)
+                        .font(.title2)
+                        .foregroundStyle(.green)
+                }
+                Text(title)
+                    .font(.title2.weight(.black))
+                Text(text)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+struct MiningStackView: View {
+    @ObservedObject var store: RatchetStore
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                PageHeader(
+                    title: "Mining Stack",
+                    subtitle: "The system you are actually operating: your Umbrel validates and routes; Braiins supplies temporary hashers; OCEAN turns pooled work into stochastic rewards."
+                )
+
+                Card {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Label("Two Hashpower Sources, One Reward Funnel", systemImage: "arrow.down.forward.and.arrow.up.backward")
+                            .font(.headline)
+                        HStack(alignment: .top, spacing: 16) {
+                            StackLane(
+                                title: "Your sovereign miner path",
+                                accent: .cyan,
+                                nodes: [
+                                    StackNode("Umbrel", "local operator shell", "house"),
+                                    StackNode("Knots", "validates Bitcoin rules", "checkmark.seal"),
+                                    StackNode("Datum", "job routing / template work", "point.3.connected.trianglepath.dotted"),
+                                    StackNode("OCEAN", "pool payout window", "water.waves")
+                                ]
+                            )
+                            StackLane(
+                                title: "Bought hashpower path",
+                                accent: .green,
+                                nodes: [
+                                    StackNode("Braiins", "hashmarket order book", "chart.line.uptrend.xyaxis"),
+                                    StackNode("Sub hashers", "temporary workers", "bolt.horizontal"),
+                                    StackNode("OCEAN", "same reward funnel", "water.waves"),
+                                    StackNode("Blocks", "luck dominates short windows", "cube")
+                                ]
+                            )
+                        }
+                    }
+                }
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    InterplayCard(
+                        title: "Braiins pressure",
+                        symbol: "cart",
+                        text: "Your controllable variable is bid shape: price, size, duration, timing, and target depth. The app currently models a shadow order before any manual spend.",
+                        facts: [
+                            "fillable price: \(market("fillable_price_btc_per_eh_day")) BTC/EH/day",
+                            "available: \(market("available_hashrate_eh_s")) EH/s",
+                            "target depth: \(market("fillable_target_ph")) PH/s"
+                        ]
+                    )
+                    InterplayCard(
+                        title: "OCEAN variance",
+                        symbol: "dice",
+                        text: "Your bought hashpower only matters if OCEAN block discovery and the payout window cooperate. Short canaries can be scientifically useful and still lose.",
+                        facts: [
+                            "pool: \(ocean("pool_hashrate_eh_s")) EH/s",
+                            "share window: \(ocean("share_log_window_t")) T",
+                            "avg block time: \(ocean("avg_block_time_hours")) h"
+                        ]
+                    )
+                    InterplayCard(
+                        title: "Local sovereignty",
+                        symbol: "lock.shield",
+                        text: "Umbrel, Knots, and Datum are treated as infrastructure context, not something this app mutates. This app reads and reasons; it does not reconfigure your node.",
+                        facts: [
+                            "computer safety: repo-local writes",
+                            "Braiins orders: manual only",
+                            "watch token: optional read-only later"
+                        ]
+                    )
+                    InterplayCard(
+                        title: "Objective",
+                        symbol: "target",
+                        text: "The objective is not a money-printer oracle. The objective is to discover bid regimes that minimize expected loss or expose rare profitable windows.",
+                        facts: [
+                            "capital: \(config("capital", "available_btc")) BTC",
+                            "canary budget: \(config("guardrails", "max_canary_expected_loss_btc")) BTC",
+                            "spend cap: \(config("guardrails", "max_manual_order_btc")) BTC"
+                        ]
+                    )
+                }
+            }
+            .padding(28)
+        }
+    }
+
+    private func market(_ key: String) -> String {
+        store.appState?.latest.market?[key]?.description ?? "n/a"
+    }
+
+    private func ocean(_ key: String) -> String {
+        store.appState?.latest.ocean?[key]?.description ?? "n/a"
+    }
+
+    private func config(_ section: String, _ key: String) -> String {
+        store.appState?.config.value(section, key) ?? "n/a"
+    }
+}
+
+struct StackNode: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let symbol: String
+
+    init(_ title: String, _ subtitle: String, _ symbol: String) {
+        self.title = title
+        self.subtitle = subtitle
+        self.symbol = symbol
+    }
+}
+
+struct StackLane: View {
+    let title: String
+    let accent: Color
+    let nodes: [StackNode]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.headline)
+            ForEach(Array(nodes.enumerated()), id: \.element.id) { index, node in
+                HStack(spacing: 12) {
+                    Image(systemName: node.symbol)
+                        .font(.title3)
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(accent.gradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(node.title)
+                            .font(.headline)
+                        Text(node.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if index < nodes.count - 1 {
+                        Image(systemName: "arrow.down")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(12)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
+struct InterplayCard: View {
+    let title: String
+    let symbol: String
+    let text: String
+    let facts: [String]
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                Label(title, systemImage: symbol)
+                    .font(.title3.weight(.bold))
+                Text(text)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(facts, id: \.self) { fact in
+                        Label(fact, systemImage: "smallcircle.filled.circle")
+                            .font(.caption.weight(.semibold))
+                    }
+                }
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+struct RatchetPathView: View {
+    @ObservedObject var store: RatchetStore
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                PageHeader(
+                    title: "Autoresearch Ratchet",
+                    subtitle: "Karpathy-style progress means one measured step forward, never a vague loop. The app should make the research path lecture-grade."
+                )
+
+                Card {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Label("Current Learning Loop", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.headline)
+                        RatchetStepper(phase: ResearchPhase.from(store.appState))
+                        Text(phaseExplanation)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    PathForecastCard(
+                        title: "Immediate",
+                        probability: "highest confidence",
+                        text: immediateForecast,
+                        symbol: "1.circle"
+                    )
+                    PathForecastCard(
+                        title: "Midterm",
+                        probability: "likely to change",
+                        text: midtermForecast,
+                        symbol: "2.circle"
+                    )
+                    PathForecastCard(
+                        title: "Longterm",
+                        probability: "conditional",
+                        text: longtermForecast,
+                        symbol: "3.circle"
+                    )
+                }
+
+                Card {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Label("One-Knob Law", systemImage: "slider.horizontal.3")
+                            .font(.headline)
+                        Text("A ratchet fails when multiple variables change at once. Strategy adaptation is only allowed when mature evidence repeats a pattern.")
+                            .font(.title3.weight(.semibold))
+                        HStack {
+                            KnobPill("depth target")
+                            KnobPill("overpay cushion")
+                            KnobPill("canary spend")
+                            KnobPill("duration")
+                            KnobPill("timing window")
+                        }
+                    }
+                }
+            }
+            .padding(28)
+        }
+    }
+
+    private var phaseExplanation: String {
+        switch ResearchPhase.from(store.appState) {
+        case .loading: return "The app is loading the durable state before choosing a research stage."
+        case .refresh: return "The market sample is stale or missing. One fresh sample is useful; a new watch is not yet justified."
+        case .watch: return "A bounded watch is the active measurement. It buys information without spending BTC."
+        case .cooldown: return "The previous watch is evidence. Cooldown prevents repeating the same experiment and pretending it was progress."
+        case .manual: return "A manual Braiins exposure is active. The ratchet holds until that real-world position is closed."
+        case .adapt: return "Evidence exists and the system can consider one controlled knob change later."
+        }
+    }
+
+    private var immediateForecast: String {
+        if let watch = store.appState?.operatorState.completedWatch {
+            return "Wait until \(watch.earliestActionLocal). Workload: zero unless you are reviewing the report."
+        }
+        if store.appState?.engineStatus.running == true {
+            return "Let the forever monitor engine own passive sampling."
+        }
+        return store.appState?.automationPlan.steps.first ?? "Load state."
+    }
+
+    private var midtermForecast: String {
+        if store.appState?.operatorState.completedWatch != nil {
+            return "After cooldown, one fresh sample compares current Braiins/OCEAN state against the last report."
+        }
+        return "The next report becomes the evidence artifact; it does not decide profit alone."
+    }
+
+    private var longtermForecast: String {
+        "Only repeated mature evidence can justify changing one bid knob or considering a tiny manual canary."
+    }
+}
+
+struct RatchetStepper: View {
+    let phase: ResearchPhase
+    private let stages: [ResearchStage] = [
+        ResearchStage("Sense", "collect", "antenna.radiowaves.left.and.right"),
+        ResearchStage("Price", "shadow market", "chart.line.uptrend.xyaxis"),
+        ResearchStage("Watch", "measure", "binoculars"),
+        ResearchStage("Mature", "wait", "hourglass"),
+        ResearchStage("Adapt", "one knob", "slider.horizontal.3")
+    ]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(stages.enumerated()), id: \.element.id) { index, stage in
+                StageBubble(stage: stage, state: state(for: index))
+                if index < stages.count - 1 {
+                    Rectangle()
+                        .fill(index < phase.index ? Color.green.opacity(0.75) : Color.secondary.opacity(0.22))
+                        .frame(height: 4)
+                }
+            }
+        }
+    }
+
+    private func state(for index: Int) -> StageBubble.StateKind {
+        if index < phase.index { return .done }
+        if index == phase.index { return .active }
+        return .future
+    }
+}
+
+struct ResearchStage: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let symbol: String
+
+    init(_ title: String, _ subtitle: String, _ symbol: String) {
+        self.title = title
+        self.subtitle = subtitle
+        self.symbol = symbol
+    }
+}
+
+struct StageBubble: View {
+    enum StateKind {
+        case done
+        case active
+        case future
+    }
+
+    let stage: ResearchStage
+    let state: StateKind
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: stage.symbol)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(width: 50, height: 50)
+                .background(fill, in: Circle())
+            Text(stage.title)
+                .font(.caption.weight(.bold))
+            Text(stage.subtitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(width: 112)
+    }
+
+    private var fill: AnyShapeStyle {
+        switch state {
+        case .done: AnyShapeStyle(Color.green.gradient)
+        case .active: AnyShapeStyle(Color.orange.gradient)
+        case .future: AnyShapeStyle(Color.secondary.opacity(0.25))
+        }
+    }
+}
+
+struct PathForecastCard: View {
+    let title: String
+    let probability: String
+    let text: String
+    let symbol: String
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(title, systemImage: symbol)
+                    .font(.title3.weight(.bold))
+                Text(probability)
+                    .font(.caption.weight(.heavy))
+                    .textCase(.uppercase)
+                    .foregroundStyle(.green)
+                Text(text)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+struct KnobPill: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.caption.weight(.bold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.regularMaterial, in: Capsule())
+    }
+}
+
+struct StrategyLabView: View {
+    @ObservedObject var store: RatchetStore
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                PageHeader(
+                    title: "Strategy Lab",
+                    subtitle: "This is the shadow bid desk. It explains what the model would study, not an owner-token execution surface."
+                )
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    ShadowOrderCard(appState: store.appState)
+                    RiskBoundaryCard(appState: store.appState)
+                }
+
+                Card {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Label("Why This Is Hard", systemImage: "exclamationmark.triangle")
+                            .font(.headline)
+                        Text("A good Braiins price can still lose if OCEAN does not find blocks inside the payout window. A bad-looking expected value can still be useful if it maps price behavior under bounded downside. The app separates learning value from profit claims.")
+                            .font(.title3.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(store.appState?.latest.proposal?["reason"]?.description ?? "No proposal loaded.")
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(28)
+        }
+    }
+}
+
+struct ShadowOrderCard: View {
+    let appState: AppStatePayload?
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("Shadow Order", systemImage: "doc.text.magnifyingglass")
+                    .font(.headline)
+                Text(actionTitle)
+                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .foregroundStyle(actionColor)
+                VStack(spacing: 8) {
+                    StrategyRow("price", proposal("order_price_btc_per_eh_day"), "BTC/EH/day")
+                    StrategyRow("spend", proposal("order_spend_btc"), "BTC")
+                    StrategyRow("duration", proposal("order_duration_minutes"), "minutes")
+                    StrategyRow("implied speed", phText(proposal("order_implied_hashrate_eh_s")), "PH/s")
+                }
+            }
+        }
+    }
+
+    private var actionTitle: String {
+        switch proposal("action") {
+        case "manual_bid": return "Manual bid review"
+        case "manual_canary": return "Learning canary"
+        case "observe": return "Observe only"
+        default: return "No proposal"
+        }
+    }
+
+    private var actionColor: Color {
+        switch proposal("action") {
+        case "manual_bid": return .green
+        case "manual_canary": return .orange
+        default: return .secondary
+        }
+    }
+
+    private func proposal(_ key: String) -> String {
+        appState?.latest.proposal?[key]?.description ?? "n/a"
+    }
+}
+
+struct RiskBoundaryCard: View {
+    let appState: AppStatePayload?
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("Loss Boundary", systemImage: "shield.lefthalf.filled")
+                    .font(.headline)
+                Text(sats(proposal("expected_net_btc")))
+                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .foregroundStyle(netColor)
+                VStack(spacing: 8) {
+                    StrategyRow("expected reward", proposal("expected_reward_btc"), "BTC")
+                    StrategyRow("expected net", proposal("expected_net_btc"), "BTC")
+                    StrategyRow("breakeven", proposal("breakeven_btc_per_eh_day"), "BTC/EH/day")
+                    StrategyRow("canary budget", config("guardrails", "max_canary_expected_loss_btc"), "BTC")
+                }
+            }
+        }
+    }
+
+    private var netColor: Color {
+        let value = Double(proposal("expected_net_btc")) ?? 0
+        return value >= 0 ? .green : .orange
+    }
+
+    private func proposal(_ key: String) -> String {
+        appState?.latest.proposal?[key]?.description ?? "n/a"
+    }
+
+    private func config(_ section: String, _ key: String) -> String {
+        appState?.config.value(section, key) ?? "n/a"
+    }
+}
+
+struct StrategyRow: View {
+    let label: String
+    let value: String
+    let unit: String
+
+    init(_ label: String, _ value: String, _ unit: String) {
+        self.label = label
+        self.value = value
+        self.unit = unit
+    }
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.body.monospacedDigit().weight(.semibold))
+            Text(unit)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+struct ManualExposureView: View {
+    @ObservedObject var store: RatchetStore
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                PageHeader(
+                    title: "Manual Exposure",
+                    subtitle: "If you manually place a Braiins order, record it here immediately so the ratchet stops creating competing experiments."
+                )
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    Card {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Label("Record A Real Position", systemImage: "plus.circle")
+                                .font(.headline)
+                            TextField("Braiins order, spend, duration, target pool", text: $store.manualDescription)
+                                .textFieldStyle(.roundedBorder)
+                            HStack {
+                                TextField("Maturity hours", text: $store.maturityHours)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 150)
+                                Button("Record Exposure") {
+                                    Task { await store.recordManualExposure() }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(store.isWorking)
+                            }
+                            Text("This does not place the order. It only records what you already did manually.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Card {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Label("Close Finished Position", systemImage: "checkmark.circle")
+                                .font(.headline)
+                            TextField("Position ID", text: $store.closePositionId)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 160)
+                            Button("Close Exposure") {
+                                Task { await store.closeManualExposure() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(store.isWorking)
+                            Text("Close only when the Braiins/OCEAN exposure is truly finished.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Card {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Label("Active Exposure Hold", systemImage: "lock.shield")
+                            .font(.headline)
+                        if let positions = store.appState?.operatorState.activeManualPositions, !positions.isEmpty {
+                            ForEach(positions, id: \.self) { position in
+                                Text(position)
+                                    .font(.body.monospaced())
+                                    .padding(10)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                        } else {
+                            Text("No manual exposure is active.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(28)
+        }
+    }
+}
+
+struct EvidenceVaultView: View {
+    @ObservedObject var store: RatchetStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                PageHeader(
+                    title: "Evidence Vault",
+                    subtitle: "Raw artifacts live here. Mission Control stays graphical; this tab is for audit and debugging."
+                )
+                Spacer()
+                Button("Cockpit") {
+                    Task { await store.showCockpit() }
+                }
+                .disabled(store.isWorking)
+                Button("Report") {
+                    Task { await store.showReport() }
+                }
+                .disabled(store.isWorking)
+                Button("Ledger") {
+                    Task { await store.showLedger() }
+                }
+                .disabled(store.isWorking)
+            }
+
+            Card {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label(store.rawTitle, systemImage: "archivebox")
+                        .font(.headline)
+                    ScrollView {
+                        Text(store.rawText)
+                            .font(.body.monospaced())
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+        }
+        .padding(28)
+    }
+}
+
+struct PageHeader: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 40, weight: .black, design: .rounded))
+            Text(subtitle)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+struct HeroSurface<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .padding(28)
+            .background(
+                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .green.opacity(0.18), radius: 30, x: 0, y: 18)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                    .stroke(.white.opacity(0.18), lineWidth: 1)
+            )
+    }
+}
+
+struct Card<Content: View>: View {
+    var padding: CGFloat = 20
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .stroke(.white.opacity(0.12), lineWidth: 1)
+            )
+    }
+}
+
+struct MetricCard: View {
     let title: String
     let value: String
     let detail: String
     let symbol: String
 
     var body: some View {
-        GlassPanel(padding: 16) {
+        Card(padding: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: symbol)
                     .font(.title2)
@@ -573,445 +1309,15 @@ struct MetricTile: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
 
-struct ResearchTimeline: View {
-    let appState: AppStatePayload?
-    let compact: Bool
-
-    private let steps = ResearchStep.allCases
-
-    var body: some View {
-        GlassPanel {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Label("Ratchet Pathway", systemImage: "arrow.triangle.2.circlepath")
-                        .font(.headline)
-                    Spacer()
-                    Text("One knob at a time")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 0) {
-                    ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
-                        TimelineNode(step: step, state: state(for: index))
-                        if index < steps.count - 1 {
-                            Rectangle()
-                                .fill(index < activeIndex ? Color.green.opacity(0.75) : Color.secondary.opacity(0.24))
-                                .frame(height: 3)
-                        }
-                    }
-                }
-
-                if !compact {
-                    Text(explanation)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    private var activeIndex: Int {
-        ResearchPhase.from(appState).timelineIndex
-    }
-
-    private func state(for index: Int) -> TimelineNode.StateKind {
-        if index < activeIndex { return .done }
-        if index == activeIndex { return .active }
-        return .future
-    }
-
-    private var explanation: String {
-        switch ResearchPhase.from(appState) {
-        case .setup: "The system needs baseline data before it can reason. First goal: establish a trustworthy local state."
-        case .refresh: "The market sample is stale. The next useful move is one fresh sample, not another watch loop."
-        case .watch: "A bounded watch buys information. It measures price action without forcing a real-money bid."
-        case .cooldown: "The previous watch is evidence. Cooldown prevents loop-chasing and gives the result time to mature."
-        case .exposure: "Manual Braiins exposure is active. The system should supervise, not create competing experiments."
-        case .adapt: "Only after repeated mature evidence should one strategy knob change. This is the anti-chaos rule."
-        }
-    }
-}
-
-struct TimelineNode: View {
-    enum StateKind {
-        case done
-        case active
-        case future
-    }
-
-    let step: ResearchStep
-    let state: StateKind
-
-    var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(fill)
-                    .frame(width: 44, height: 44)
-                Image(systemName: step.systemImage)
-                    .foregroundStyle(.white)
-                    .font(.headline)
-            }
-            Text(step.title)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(state == .future ? .secondary : .primary)
-                .frame(width: 86)
-        }
-    }
-
-    private var fill: Color {
-        switch state {
-        case .done: .green.opacity(0.82)
-        case .active: .orange.opacity(0.92)
-        case .future: .secondary.opacity(0.25)
-        }
-    }
-}
-
-struct PlainEnglishCard: View {
-    let appState: AppStatePayload?
-
-    var body: some View {
-        GlassPanel {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Noob Translation", systemImage: "quote.bubble")
-                    .font(.headline)
-                Text(summary)
-                    .font(.title3.weight(.semibold))
-                Text("This app separates observation from execution. It can tell you what the research engine currently thinks; it cannot secretly spend BTC.")
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var summary: String {
-        let directive = Directive.from(appState)
-        if let watch = appState?.operatorState.completedWatch {
-            return "You are in cooldown. The earliest useful next action is \(watch.earliestActionLocal), about \(watch.remainingMinutes) minutes from the last refresh."
-        }
-        return "\(directive.title): \(directive.detail)"
-    }
-}
-
-struct ResearchMapView: View {
-    let appState: AppStatePayload?
-    let glow: Bool
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                HStack(alignment: .center, spacing: 24) {
-                    AutoresearchOrb(phase: ResearchPhase.from(appState), glow: glow)
-                        .frame(width: 320, height: 320)
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Autoresearch Is A Ratchet")
-                            .font(.system(size: 38, weight: .black, design: .rounded))
-                        Text("A ratchet is a one-way learning machine: it allows progress when evidence matures, and blocks fake progress when you are just repeating the same loop.")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                ResearchTimeline(appState: appState, compact: false)
-                HypothesisBoard(appState: appState)
-            }
-            .padding(28)
-        }
-    }
-}
-
-struct HypothesisBoard: View {
-    let appState: AppStatePayload?
-
-    var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-            PrincipleCard(
-                title: "Current Hypothesis",
-                symbol: "lightbulb",
-                text: appState?.automationPlan.title ?? "Load state first."
-            )
-            PrincipleCard(
-                title: "Evidence Artifact",
-                symbol: "archivebox",
-                text: appState?.operatorState.latestReport ?? "No report exists yet."
-            )
-            PrincipleCard(
-                title: "Allowed Intervention",
-                symbol: "slider.horizontal.3",
-                text: "Change exactly one knob only after mature reports repeat the same pattern."
-            )
-            PrincipleCard(
-                title: "Blocked Failure Mode",
-                symbol: "hand.raised",
-                text: "No loop-chasing. No untracked manual exposure. No automated Braiins owner-token execution."
-            )
-        }
-    }
-}
-
-struct PrincipleCard: View {
-    let title: String
-    let symbol: String
-    let text: String
-
-    var body: some View {
-        GlassPanel {
-            VStack(alignment: .leading, spacing: 12) {
-                Label(title, systemImage: symbol)
-                    .font(.headline)
-                Text(text)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-}
-
-struct ManualExposureView: View {
-    let appState: AppStatePayload?
-    @Binding var manualDescription: String
-    @Binding var maturityHours: String
-    @Binding var closePositionId: String
-    let isRunning: Bool
-    let record: () -> Void
-    let close: () -> Void
-    let list: () -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                Text("Manual Exposure Ledger")
-                    .font(.system(size: 38, weight: .black, design: .rounded))
-                Text("If you manually place a Braiins bid, record it here. The app then holds the research lifecycle so it does not start a competing experiment while real hashpower may still be maturing.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-
-                GlassPanel {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label("Record Active Braiins Exposure", systemImage: "plus.circle")
-                            .font(.headline)
-                        TextField("Description, e.g. Braiins order abc, 0.00010 BTC, 180 min", text: $manualDescription)
-                            .textFieldStyle(.roundedBorder)
-                        HStack {
-                            TextField("Maturity hours", text: $maturityHours)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 160)
-                            Button("Record Exposure", action: record)
-                                .buttonStyle(.borderedProminent)
-                                .disabled(isRunning)
-                        }
-                    }
-                }
-
-                GlassPanel {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label("Close Finished Exposure", systemImage: "checkmark.circle")
-                            .font(.headline)
-                        TextField("Position ID", text: $closePositionId)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 180)
-                        HStack {
-                            Button("Close Exposure", action: close)
-                                .buttonStyle(.borderedProminent)
-                                .disabled(isRunning)
-                            Button("List Positions", action: list)
-                                .buttonStyle(.bordered)
-                                .disabled(isRunning)
-                        }
-                    }
-                }
-
-                ActiveExposureList(positions: appState?.operatorState.activeManualPositions ?? [])
-            }
-            .padding(28)
-        }
-    }
-}
-
-struct ActiveExposureList: View {
-    let positions: [String]
-
-    var body: some View {
-        GlassPanel {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Active Exposure", systemImage: "shield")
-                    .font(.headline)
-                if positions.isEmpty {
-                    Text("No manual positions recorded.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(positions, id: \.self) { position in
-                        Text(position)
-                            .font(.system(.body, design: .monospaced))
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct AdvancedView: View {
-    let transcript: String
-    let lastCommand: String
-    let isRunning: Bool
-    let loadReport: () -> Void
-    let loadLedger: () -> Void
-    let loadCockpit: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Advanced")
-                        .font(.system(size: 36, weight: .black, design: .rounded))
-                    Text("Raw artifacts and backend diagnostics live here, away from Mission Control.")
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Cockpit", action: loadCockpit).disabled(isRunning)
-                Button("Report", action: loadReport).disabled(isRunning)
-                Button("Ledger", action: loadLedger).disabled(isRunning)
-            }
-
-            GlassPanel {
-                VStack(alignment: .leading, spacing: 10) {
-                    Label(lastCommand, systemImage: "wrench.and.screwdriver")
-                        .font(.headline)
-                    ScrollView {
-                        Text(transcript)
-                            .font(.system(.body, design: .monospaced))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-        }
-        .padding(28)
-    }
-}
-
-struct RatchetLectureView: View {
-    private let lessons = [
-        ("Observe", "Collect state without acting. Public Braiins price action and OCEAN context are measurements, not commands.", "eye"),
-        ("Hypothesize", "State one reason a window might be useful. If the reason is vague, the experiment is not ready.", "lightbulb"),
-        ("Bound", "Keep downside bounded. Canary means buying information, not pretending there is a money printer.", "shippingbox"),
-        ("Mature", "Wait long enough for mining luck, share windows, and pool variance to mean something.", "hourglass"),
-        ("Adapt", "Change one knob. If you change many knobs, you destroy attribution and learn nothing.", "dial.medium")
-    ]
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                Text("The General Ratchet Principle")
-                    .font(.system(size: 40, weight: .black, design: .rounded))
-                Text("Autoresearch is not automation for its own sake. It is a disciplined loop that prevents mode collapse in a noisy, non-convex search space.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-
-                ForEach(Array(lessons.enumerated()), id: \.offset) { index, lesson in
-                    GlassPanel {
-                        HStack(alignment: .top, spacing: 16) {
-                            Text("\(index + 1)")
-                                .font(.title.weight(.black))
-                                .foregroundStyle(.white)
-                                .frame(width: 54, height: 54)
-                                .background(.green.gradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            VStack(alignment: .leading, spacing: 8) {
-                                Label(lesson.0, systemImage: lesson.2)
-                                    .font(.title2.weight(.bold))
-                                Text(lesson.1)
-                                    .font(.body)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(28)
-        }
-    }
-}
-
-struct AutoresearchOrb: View {
-    let phase: ResearchPhase
-    let glow: Bool
-
-    var body: some View {
-        ZStack {
-            ForEach(0..<4) { index in
-                Circle()
-                    .stroke(
-                        AngularGradient(
-                            colors: [.green.opacity(0.15), .mint.opacity(0.75), .orange.opacity(0.55), .green.opacity(0.15)],
-                            center: .center
-                        ),
-                        lineWidth: CGFloat(12 - index * 2)
-                    )
-                    .frame(width: CGFloat(210 + index * 28), height: CGFloat(210 + index * 28))
-                    .rotationEffect(.degrees(glow ? Double(24 * (index + 1)) : Double(-18 * (index + 1))))
-                    .opacity(0.72 - Double(index) * 0.12)
-            }
-
-            Circle()
-                .fill(.ultraThinMaterial)
-                .frame(width: 178, height: 178)
-                .shadow(color: .green.opacity(glow ? 0.35 : 0.12), radius: glow ? 32 : 14)
-
-            VStack(spacing: 8) {
-                Image(systemName: phase.symbol)
-                    .font(.system(size: 42, weight: .bold))
-                    .foregroundStyle(.green)
-                Text(phase.title)
-                    .font(.title2.weight(.black))
-                Text("current phase")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Current autoresearch phase: \(phase.title)")
-    }
-}
-
-struct CooldownGauge: View {
-    let watch: CompletedWatchPayload
-
-    var progress: Double {
-        guard watch.cooldownMinutes > 0 else { return 1 }
-        return min(1, max(0, 1 - Double(watch.remainingMinutes) / Double(watch.cooldownMinutes)))
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label("Cooldown", systemImage: "timer")
-                    .font(.headline)
-                Spacer()
-                Text("\(Int(progress * 100))%")
-                    .font(.headline.monospacedDigit())
-            }
-            ProgressView(value: progress)
-                .tint(.green)
-            Text("Earliest next action: \(watch.earliestActionLocal). Remaining: \(watch.remainingMinutes) minutes.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-struct SafetyStrip: View {
+struct SafetyRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Label("No hidden bids", systemImage: "lock")
-            Label("Manual execution", systemImage: "hand.point.up.left")
+            Label("Manual Braiins execution", systemImage: "hand.point.up.left")
             Label("Repo-local state", systemImage: "externaldrive")
         }
         .font(.caption.weight(.bold))
@@ -1019,97 +1325,287 @@ struct SafetyStrip: View {
     }
 }
 
-struct GlassPanel<Content: View>: View {
-    var padding: CGFloat = 22
-    @ViewBuilder let content: Content
+struct EngineBadge: View {
+    let status: EngineStatusPayload?
 
     var body: some View {
-        content
-            .padding(padding)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(.white.opacity(0.16), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.16), radius: 24, x: 0, y: 16)
+        VStack(spacing: 8) {
+            Image(systemName: status?.running == true ? "dot.radiowaves.left.and.right" : "power")
+                .font(.system(size: 34, weight: .bold))
+                .foregroundStyle(status?.running == true ? .green : .secondary)
+            Text(status?.running == true ? "engine running" : "engine stopped")
+                .font(.headline)
+            Text(status?.detail ?? "loading engine status")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
 
-struct AppBackground: View {
-    let glow: Bool
+struct PhaseOrb: View {
+    let phase: ResearchPhase
+    let running: Bool
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<4) { index in
+                Circle()
+                    .stroke(
+                        AngularGradient(
+                            colors: [.green.opacity(0.14), .mint.opacity(0.74), .orange.opacity(0.54), .green.opacity(0.14)],
+                            center: .center
+                        ),
+                        lineWidth: CGFloat(12 - index * 2)
+                    )
+                    .frame(width: CGFloat(170 + index * 28), height: CGFloat(170 + index * 28))
+                    .rotationEffect(.degrees(running ? Double(18 * (index + 1)) : Double(-8 * (index + 1))))
+                    .opacity(0.72 - Double(index) * 0.12)
+            }
+
+            Circle()
+                .fill(.regularMaterial)
+                .frame(width: 154, height: 154)
+
+            VStack(spacing: 8) {
+                Image(systemName: phase.symbol)
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundStyle(.green)
+                Text(phase.title)
+                    .font(.title2.weight(.black))
+                Text("ratchet phase")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+            }
+        }
+    }
+}
+
+struct CooldownRing: View {
+    let watch: CompletedWatchPayload
+
+    private var progress: Double {
+        guard watch.cooldownMinutes > 0 else { return 1 }
+        return min(1, max(0, 1 - Double(watch.remainingMinutes) / Double(watch.cooldownMinutes)))
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .stroke(.secondary.opacity(0.18), lineWidth: 12)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(.green.gradient, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text("\(Int(progress * 100))%")
+                    .font(.title2.monospacedDigit().weight(.black))
+            }
+            .frame(width: 120, height: 120)
+
+            Text("cooldown")
+                .font(.headline)
+            Text("\(watch.remainingMinutes)m left")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+            Text(watch.earliestActionLocal)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+}
+
+struct AppBackdrop: View {
+    let animate: Bool
 
     var body: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.03, green: 0.06, blue: 0.07),
-                    Color(red: 0.07, green: 0.16, blue: 0.15),
-                    Color(red: 0.22, green: 0.21, blue: 0.14)
+                    Color(red: 0.025, green: 0.045, blue: 0.055),
+                    Color(red: 0.045, green: 0.135, blue: 0.13),
+                    Color(red: 0.20, green: 0.18, blue: 0.11)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             Circle()
-                .fill(.green.opacity(glow ? 0.22 : 0.11))
-                .frame(width: 560, height: 560)
-                .blur(radius: 90)
-                .offset(x: -360, y: -280)
-            Circle()
-                .fill(.orange.opacity(glow ? 0.16 : 0.08))
-                .frame(width: 440, height: 440)
+                .fill(.green.opacity(animate ? 0.24 : 0.10))
+                .frame(width: 620, height: 620)
                 .blur(radius: 100)
-                .offset(x: 460, y: 260)
-            RoundedRectangle(cornerRadius: 90, style: .continuous)
-                .stroke(.white.opacity(0.07), lineWidth: 1)
-                .frame(width: 860, height: 520)
-                .rotationEffect(.degrees(-13))
-                .offset(x: 280, y: -170)
+                .offset(x: -380, y: -290)
+            Circle()
+                .fill(.orange.opacity(animate ? 0.17 : 0.07))
+                .frame(width: 520, height: 520)
+                .blur(radius: 120)
+                .offset(x: 500, y: 300)
+            RoundedRectangle(cornerRadius: 100, style: .continuous)
+                .stroke(.white.opacity(0.06), lineWidth: 1)
+                .frame(width: 900, height: 540)
+                .rotationEffect(.degrees(-12))
+                .offset(x: 270, y: -170)
         }
         .ignoresSafeArea()
     }
 }
 
-enum ResearchStep: String, CaseIterable, Identifiable {
-    case sense
-    case price
+enum Decision {
+    case load
+    case busy(String)
+    case hold
+    case waitWatch
+    case cooldown(String)
+    case engine
+    case refresh
     case watch
-    case mature
-    case adapt
+    case review
+    case observe
 
-    var id: String { rawValue }
+    static func from(_ appState: AppStatePayload?, isWorking: Bool) -> Decision {
+        if isWorking { return .busy("Working") }
+        guard let appState else { return .load }
+        let state = appState.operatorState
+        if !state.activeManualPositions.isEmpty { return .hold }
+        if state.activeWatch != nil { return .waitWatch }
+        if appState.engineStatus.running { return .engine }
+        if let watch = state.completedWatch { return .cooldown(watch.earliestActionLocal) }
+        if !state.hasOcean || !state.hasMarket || !state.isFresh { return .refresh }
+        if state.action == "manual_canary" { return .watch }
+        if state.action == "manual_bid" { return .review }
+        return .observe
+    }
 
     var title: String {
         switch self {
-        case .sense: "Sense"
-        case .price: "Price"
-        case .watch: "Watch"
-        case .mature: "Mature"
-        case .adapt: "Adapt"
+        case .load: return "LOAD"
+        case .busy: return "WORKING"
+        case .hold: return "HOLD"
+        case .waitWatch: return "WAIT"
+        case .cooldown: return "COOLDOWN"
+        case .engine: return "ENGINE ON"
+        case .refresh: return "REFRESH"
+        case .watch: return "WATCH"
+        case .review: return "REVIEW"
+        case .observe: return "OBSERVE"
         }
     }
 
-    var systemImage: String {
+    var explanation: String {
         switch self {
-        case .sense: "antenna.radiowaves.left.and.right"
-        case .price: "chart.line.uptrend.xyaxis"
-        case .watch: "binoculars"
-        case .mature: "hourglass"
-        case .adapt: "slider.horizontal.3"
+        case .load:
+            return "Reading the durable SQLite state and latest evidence."
+        case .busy(let operation):
+            return "\(operation) is running. Do not start a competing operation."
+        case .hold:
+            return "A real manual Braiins exposure is active. The app must supervise, not generate new experiments."
+        case .waitWatch:
+            return "A passive watch is already running. Starting another would corrupt attribution."
+        case .cooldown(let time):
+            return "The last watch already produced evidence. Earliest useful next action: \(time)."
+        case .engine:
+            return "The forever monitor engine owns passive research. Your workload is zero unless a manual exposure exists."
+        case .refresh:
+            return "The market state is stale or missing. One fresh sample is useful before any new watch."
+        case .watch:
+            return "A bounded passive watch is useful. It buys information; it does not spend BTC."
+        case .review:
+            return "A stricter manual-bid signal exists. Read the report before any Braiins action."
+        case .observe:
+            return "No useful bid window is visible. Waiting is a valid action."
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .load, .observe: return .secondary
+        case .busy, .hold, .waitWatch, .cooldown: return .orange
+        case .engine, .refresh, .watch, .review: return .green
+        }
+    }
+}
+
+enum ControlOwner {
+    case app
+    case engine
+    case watch
+    case cooldown(String)
+    case manual
+    case busy
+    case loading
+
+    static func from(_ appState: AppStatePayload?, isWorking: Bool) -> ControlOwner {
+        if isWorking { return .busy }
+        guard let appState else { return .loading }
+        if !appState.operatorState.activeManualPositions.isEmpty { return .manual }
+        if appState.operatorState.activeWatch != nil { return .watch }
+        if appState.engineStatus.running { return .engine }
+        if let watch = appState.operatorState.completedWatch { return .cooldown(watch.earliestActionLocal) }
+        return .app
+    }
+
+    var title: String {
+        switch self {
+        case .app: return "The app is ready"
+        case .engine: return "Forever engine"
+        case .watch: return "Watch run"
+        case .cooldown: return "Cooldown"
+        case .manual: return "Manual exposure"
+        case .busy: return "Current operation"
+        case .loading: return "Loading"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .app:
+            return "No active watch, no cooldown block, and no manual exposure. Use the enabled action."
+        case .engine:
+            return "The background monitor engine waits, samples, writes reports, and resumes after restarts when you start it again."
+        case .watch:
+            return "A passive watch owns the research window. Wait for its report."
+        case .cooldown(let time):
+            return "The latest report owns the next decision. Wait until \(time)."
+        case .manual:
+            return "A real-money exposure is active. Close it only after the Braiins/OCEAN position is actually finished."
+        case .busy:
+            return "A backend operation is running. The safe action is to wait."
+        case .loading:
+            return "The app is reading local state."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .app: return "scope"
+        case .engine: return "dot.radiowaves.left.and.right"
+        case .watch: return "binoculars"
+        case .cooldown: return "timer"
+        case .manual: return "lock.shield"
+        case .busy: return "gearshape.2"
+        case .loading: return "questionmark.circle"
         }
     }
 }
 
 enum ResearchPhase {
-    case setup
+    case loading
     case refresh
     case watch
     case cooldown
-    case exposure
+    case manual
     case adapt
 
     static func from(_ appState: AppStatePayload?) -> ResearchPhase {
-        guard let state = appState?.operatorState else { return .setup }
-        if !state.activeManualPositions.isEmpty { return .exposure }
+        guard let state = appState?.operatorState else { return .loading }
+        if !state.activeManualPositions.isEmpty { return .manual }
         if state.activeWatch != nil { return .watch }
         if state.completedWatch != nil { return .cooldown }
         if !state.hasOcean || !state.hasMarket || !state.isFresh { return .refresh }
@@ -1119,69 +1615,33 @@ enum ResearchPhase {
 
     var title: String {
         switch self {
-        case .setup: "Setup"
-        case .refresh: "Refresh"
-        case .watch: "Watch"
-        case .cooldown: "Mature"
-        case .exposure: "Hold"
-        case .adapt: "Adapt"
+        case .loading: return "Loading"
+        case .refresh: return "Sense"
+        case .watch: return "Watch"
+        case .cooldown: return "Mature"
+        case .manual: return "Hold"
+        case .adapt: return "Adapt"
         }
     }
 
     var symbol: String {
         switch self {
-        case .setup: "wrench.and.screwdriver"
-        case .refresh: "arrow.clockwise"
-        case .watch: "binoculars"
-        case .cooldown: "timer"
-        case .exposure: "lock.shield"
-        case .adapt: "slider.horizontal.3"
+        case .loading: return "questionmark"
+        case .refresh: return "antenna.radiowaves.left.and.right"
+        case .watch: return "binoculars"
+        case .cooldown: return "hourglass"
+        case .manual: return "lock.shield"
+        case .adapt: return "slider.horizontal.3"
         }
     }
 
-    var timelineIndex: Int {
+    var index: Int {
         switch self {
-        case .setup: 0
-        case .refresh: 1
-        case .watch: 2
-        case .cooldown, .exposure: 3
-        case .adapt: 4
+        case .loading, .refresh: return 0
+        case .watch: return 2
+        case .cooldown, .manual: return 3
+        case .adapt: return 4
         }
-    }
-}
-
-struct Directive {
-    let title: String
-    let detail: String
-    let color: Color
-
-    static func from(_ appState: AppStatePayload?) -> Directive {
-        guard let appState else {
-            return Directive(title: "LOAD STATE", detail: "The app is reading the ratchet lifecycle database.", color: .secondary)
-        }
-        if let watch = appState.operatorState.completedWatch {
-            return Directive(
-                title: "STOP",
-                detail: "Wait until \(watch.earliestActionLocal). Repeating the same watch now would be loop-chasing.",
-                color: .orange
-            )
-        }
-        if appState.operatorState.activeWatch != nil {
-            return Directive(title: "WAIT", detail: "A watch is already running. Do not start another one.", color: .orange)
-        }
-        if !appState.operatorState.activeManualPositions.isEmpty {
-            return Directive(title: "HOLD", detail: "Manual Braiins exposure is active. Supervise it; do not start new experiments.", color: .orange)
-        }
-        if !appState.operatorState.hasOcean || !appState.operatorState.hasMarket || !appState.operatorState.isFresh {
-            return Directive(title: "REFRESH", detail: "The latest market state is stale or missing. Collect exactly one fresh sample.", color: .green)
-        }
-        if appState.operatorState.action == "manual_canary" {
-            return Directive(title: "WATCH", detail: "Run one bounded passive watch. This buys information, not a promise of profit.", color: .green)
-        }
-        if appState.operatorState.action == "manual_bid" {
-            return Directive(title: "REVIEW", detail: "Read the full report before any manual Braiins action.", color: .green)
-        }
-        return Directive(title: "OBSERVE", detail: "No useful action window is visible right now.", color: .secondary)
     }
 }
 
@@ -1189,6 +1649,8 @@ struct AppStatePayload: Codable {
     let generatedAt: String
     let operatorState: OperatorStatePayload
     let automationPlan: AutomationPlanPayload
+    let engineStatus: EngineStatusPayload
+    let config: ConfigPayload
     let cockpit: String
     let latest: LatestPayload
 
@@ -1196,6 +1658,8 @@ struct AppStatePayload: Codable {
         case generatedAt = "generated_at"
         case operatorState = "operator_state"
         case automationPlan = "automation_plan"
+        case engineStatus = "engine_status"
+        case config
         case cockpit
         case latest
     }
@@ -1263,10 +1727,41 @@ struct AutomationPlanPayload: Codable {
     }
 }
 
+struct EngineStatusPayload: Codable {
+    let running: Bool
+    let pid: Int?
+    let detail: String
+    let logPath: String
+
+    enum CodingKeys: String, CodingKey {
+        case running
+        case pid
+        case detail
+        case logPath = "log_path"
+    }
+}
+
 struct LatestPayload: Codable {
     let ocean: [String: LooseString]?
     let market: [String: LooseString]?
     let proposal: [String: LooseString]?
+}
+
+struct ConfigPayload: Codable {
+    let capital: [String: LooseString]?
+    let ocean: [String: LooseString]?
+    let guardrails: [String: LooseString]?
+    let strategy: [String: LooseString]?
+
+    func value(_ section: String, _ key: String) -> String? {
+        switch section {
+        case "capital": return capital?[key]?.description
+        case "ocean": return ocean?[key]?.description
+        case "guardrails": return guardrails?[key]?.description
+        case "strategy": return strategy?[key]?.description
+        default: return nil
+        }
+    }
 }
 
 struct LooseString: Codable, CustomStringConvertible {
@@ -1283,7 +1778,7 @@ struct LooseString: Codable, CustomStringConvertible {
         } else if let double = try? container.decode(Double.self) {
             description = String(double)
         } else if let bool = try? container.decode(Bool.self) {
-            description = String(bool)
+            description = bool ? "true" : "false"
         } else {
             description = "n/a"
         }
@@ -1306,6 +1801,17 @@ extension String {
     }
 }
 
+func sats(_ btcText: String) -> String {
+    guard let btc = Double(btcText) else { return "n/a" }
+    let sats = Int((btc * 100_000_000).rounded())
+    return "\(sats) sats"
+}
+
+func phText(_ ehText: String) -> String {
+    guard let eh = Double(ehText) else { return "n/a" }
+    return String(format: "%.3f", eh * 1000)
+}
+
 enum AppIconFactory {
     static func makeIcon(size: CGFloat = 512) -> NSImage {
         let image = NSImage(size: NSSize(width: size, height: size))
@@ -1313,49 +1819,62 @@ enum AppIconFactory {
 
         let rect = NSRect(x: 0, y: 0, width: size, height: size)
         let corner = size * 0.22
-        let path = NSBezierPath(roundedRect: rect.insetBy(dx: size * 0.04, dy: size * 0.04), xRadius: corner, yRadius: corner)
+        let path = NSBezierPath(
+            roundedRect: rect.insetBy(dx: size * 0.04, dy: size * 0.04),
+            xRadius: corner,
+            yRadius: corner
+        )
         NSGradient(
             colors: [
-                NSColor(red: 0.03, green: 0.09, blue: 0.10, alpha: 1),
-                NSColor(red: 0.04, green: 0.27, blue: 0.26, alpha: 1),
-                NSColor(red: 0.55, green: 0.86, blue: 0.50, alpha: 1)
+                NSColor(red: 0.02, green: 0.08, blue: 0.09, alpha: 1),
+                NSColor(red: 0.03, green: 0.30, blue: 0.26, alpha: 1),
+                NSColor(red: 0.70, green: 0.95, blue: 0.48, alpha: 1)
             ]
         )?.draw(in: path, angle: -35)
 
-        NSColor.white.withAlphaComponent(0.18).setStroke()
+        NSColor.white.withAlphaComponent(0.20).setStroke()
         path.lineWidth = size * 0.012
         path.stroke()
 
         let ringRect = rect.insetBy(dx: size * 0.18, dy: size * 0.18)
         let ring = NSBezierPath(ovalIn: ringRect)
-        NSColor(red: 0.73, green: 1.0, blue: 0.78, alpha: 0.26).setFill()
+        NSColor(red: 0.78, green: 1.0, blue: 0.72, alpha: 0.24).setFill()
         ring.fill()
 
-        let inner = NSBezierPath(ovalIn: rect.insetBy(dx: size * 0.27, dy: size * 0.27))
-        NSColor(red: 0.02, green: 0.07, blue: 0.08, alpha: 0.85).setFill()
-        inner.fill()
+        let core = NSBezierPath(ovalIn: rect.insetBy(dx: size * 0.31, dy: size * 0.31))
+        NSColor(red: 0.01, green: 0.06, blue: 0.07, alpha: 0.88).setFill()
+        core.fill()
 
-        let pick = NSBezierPath()
-        pick.move(to: NSPoint(x: size * 0.30, y: size * 0.30))
-        pick.line(to: NSPoint(x: size * 0.68, y: size * 0.70))
-        pick.line(to: NSPoint(x: size * 0.76, y: size * 0.62))
-        pick.line(to: NSPoint(x: size * 0.38, y: size * 0.22))
-        pick.close()
-        NSColor(red: 1.0, green: 0.77, blue: 0.35, alpha: 0.98).setFill()
-        pick.fill()
+        let ratchet = NSBezierPath()
+        let teeth = 12
+        let center = NSPoint(x: size * 0.5, y: size * 0.5)
+        for index in 0..<(teeth * 2) {
+            let angle = (Double(index) / Double(teeth * 2)) * Double.pi * 2
+            let radius = size * (index.isMultiple(of: 2) ? 0.26 : 0.19)
+            let point = NSPoint(
+                x: center.x + CGFloat(cos(angle)) * radius,
+                y: center.y + CGFloat(sin(angle)) * radius
+            )
+            if index == 0 {
+                ratchet.move(to: point)
+            } else {
+                ratchet.line(to: point)
+            }
+        }
+        ratchet.close()
+        NSColor(red: 0.94, green: 0.77, blue: 0.33, alpha: 0.96).setFill()
+        ratchet.fill()
 
-        let spark = NSBezierPath()
-        spark.move(to: NSPoint(x: size * 0.55, y: size * 0.28))
-        spark.line(to: NSPoint(x: size * 0.62, y: size * 0.42))
-        spark.line(to: NSPoint(x: size * 0.76, y: size * 0.48))
-        spark.line(to: NSPoint(x: size * 0.62, y: size * 0.54))
-        spark.line(to: NSPoint(x: size * 0.55, y: size * 0.68))
-        spark.line(to: NSPoint(x: size * 0.48, y: size * 0.54))
-        spark.line(to: NSPoint(x: size * 0.34, y: size * 0.48))
-        spark.line(to: NSPoint(x: size * 0.48, y: size * 0.42))
-        spark.close()
-        NSColor(red: 0.76, green: 1.0, blue: 0.74, alpha: 0.95).setFill()
-        spark.fill()
+        let arrow = NSBezierPath()
+        arrow.move(to: NSPoint(x: size * 0.42, y: size * 0.48))
+        arrow.line(to: NSPoint(x: size * 0.61, y: size * 0.66))
+        arrow.line(to: NSPoint(x: size * 0.64, y: size * 0.51))
+        arrow.line(to: NSPoint(x: size * 0.77, y: size * 0.54))
+        arrow.line(to: NSPoint(x: size * 0.58, y: size * 0.77))
+        arrow.line(to: NSPoint(x: size * 0.36, y: size * 0.60))
+        arrow.close()
+        NSColor(red: 0.74, green: 1.0, blue: 0.72, alpha: 0.95).setFill()
+        arrow.fill()
 
         image.unlockFocus()
         return image
@@ -1370,81 +1889,60 @@ enum RatchetProcess {
             }
 
             let script = repoRoot.appendingPathComponent("scripts/ratchet").path
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-lc", ([script, "app-state"]).map(shellQuote).joined(separator: " ")]
-            process.currentDirectoryURL = repoRoot
+            let result = runProcess(repoRoot: repoRoot, arguments: [script, "app-state"])
+            guard result.status == 0 else {
+                return .failure(result.text)
+            }
 
-            let outputPipe = Pipe()
-            let errorPipe = Pipe()
-            process.standardOutput = outputPipe
-            process.standardError = errorPipe
+            guard let data = result.text.data(using: .utf8) else {
+                return .failure("App-state returned non-UTF8 output.")
+            }
 
             do {
-                try process.run()
-                process.waitUntilExit()
-                let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: outputData, encoding: .utf8) ?? ""
-                let errors = String(data: errorData, encoding: .utf8) ?? ""
-
-                guard process.terminationStatus == 0 else {
-                    return .failure(errors.isEmpty ? output : errors)
-                }
-
-                do {
-                    let payload = try JSONDecoder().decode(AppStatePayload.self, from: outputData)
-                    return .success(payload)
-                } catch {
-                    return .failure("""
-                    Could not decode native app state.
-
-                    Decode error: \(error.localizedDescription)
-
-                    Output:
-                    \(output)
-                    \(errors)
-                    """)
-                }
+                return .success(try JSONDecoder().decode(AppStatePayload.self, from: data))
             } catch {
-                return .failure("Failed to load app state: \(error.localizedDescription)")
+                return .failure("""
+                Could not decode native app state.
+
+                Decode error: \(error.localizedDescription)
+
+                Output:
+                \(result.text)
+                """)
             }
         }.value
     }
 
-    static func run(arguments: [String], input: String? = nil) async -> String {
+    static func run(arguments: [String]) async -> String {
         await Task.detached {
             guard let repoRoot = findRepoRoot() else {
                 return repoNotFoundMessage
             }
-
             let script = repoRoot.appendingPathComponent("scripts/ratchet").path
-
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-lc", ([script] + arguments).map(shellQuote).joined(separator: " ")]
-            process.currentDirectoryURL = repoRoot
-
-            let outputPipe = Pipe()
-            let inputPipe = Pipe()
-            process.standardOutput = outputPipe
-            process.standardError = outputPipe
-            process.standardInput = inputPipe
-
-            do {
-                try process.run()
-                if let input {
-                    inputPipe.fileHandleForWriting.write(Data(input.utf8))
-                }
-                inputPipe.fileHandleForWriting.closeFile()
-                process.waitUntilExit()
-                let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                let text = String(data: data, encoding: .utf8) ?? ""
-                return text.isEmpty ? "Command finished with no output." : text
-            } catch {
-                return "Failed to run ratchet command: \(error.localizedDescription)"
-            }
+            let result = runProcess(repoRoot: repoRoot, arguments: [script] + arguments)
+            return result.text.isEmpty ? "Operation finished with no output." : result.text
         }.value
+    }
+
+    private static func runProcess(repoRoot: URL, arguments: [String]) -> (status: Int32, text: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", arguments.map(shellQuote).joined(separator: " ")]
+        process.currentDirectoryURL = repoRoot
+
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            let text = String(data: data, encoding: .utf8) ?? ""
+            return (process.terminationStatus, text)
+        } catch {
+            return (1, "Failed to run backend operation: \(error.localizedDescription)")
+        }
     }
 
     private static func findRepoRoot() -> URL? {
@@ -1462,7 +1960,6 @@ enum RatchetProcess {
                 if fileManager.isExecutableFile(atPath: script) {
                     return current
                 }
-
                 let parent = current.deletingLastPathComponent()
                 if parent.path == current.path {
                     break

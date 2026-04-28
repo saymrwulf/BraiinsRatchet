@@ -11,8 +11,13 @@ Apple's Liquid Glass guidance emphasizes system-native structure before visual e
 - Avoid overusing custom glass effects; too much glass becomes noise.
 - Support arbitrary window sizes with split views.
 - Preserve accessibility when transparency or motion is reduced.
+- Use custom glass sparingly; standard controls and split views should carry most of the Tahoe look.
 
 Source: <https://developer.apple.com/documentation/TechnologyOverviews/adopting-liquid-glass>
+
+Apple's SwiftUI Liquid Glass documentation adds the implementation constraint: too many custom glass containers can degrade performance, so this app keeps the primary glass treatment on the hero and control surfaces instead of turning every content block into an effect demo.
+
+Source: <https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views>
 
 Microsoft's Human-AI Interaction Guidelines are directly relevant because this app makes recommendations under uncertainty:
 
@@ -40,16 +45,19 @@ The native app now treats the Python engine as a structured state provider, not 
 
 - Current operator state.
 - Passive action plan.
+- Forever engine status.
+- Guardrail and strategy configuration.
 - Cockpit text for audit/debug.
 - Latest OCEAN, Braiins, and strategy proposal payloads.
 
 The SwiftUI app turns that into native surfaces:
 
-- `Mission Control`: one exact action, cooldown, direct watch-only controls, and metrics.
-- `Research Map`: the ratchet pathway as a visual stage model.
+- `Mission Control`: current decision, control ownership, forever engine, cooldown, and evidence.
+- `Mining Stack`: Umbrel, Knots, Datum, OCEAN, Braiins, and block-luck interplay.
+- `Ratchet`: the observe, price, watch, mature, adapt pathway.
+- `Strategy Lab`: shadow order, expected net, breakeven, and loss boundary.
 - `Manual Exposure`: the ledger for real manually placed Braiins exposure.
-- `Advanced`: raw artifacts kept available but no longer primary.
-- `Ratchet Lecture`: a teachable model of observe, hypothesize, bound, mature, adapt.
+- `Evidence Vault`: raw artifacts kept available but no longer primary.
 
 ## The Ratchet UX Rule
 
@@ -60,5 +68,6 @@ The app must always answer these questions without forcing the user to parse log
 3. What evidence artifact exists?
 4. What action is blocked for safety?
 5. Which single knob, if any, is eligible for later adaptation?
+6. How the Braiins/OCEAN/Umbrel/Datum/Knots system interacts with the recommendation.
 
 If the app cannot answer those questions graphically and in plain language, it is failing its purpose.

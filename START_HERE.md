@@ -15,23 +15,24 @@ Your job is not to understand every metric.
 Your job is:
 
 1. Open the app with `./scripts/ratchet app`.
-2. Stay on `Mission Control` unless you intentionally need raw diagnostics.
+2. Stay on `Mission Control` unless you intentionally need another tab.
 3. Read `Current Decision` first.
-4. Read `Who Is In Control` second.
-5. Use `Next Passive Action` only when it is enabled.
+4. Read `Who Owns Control` second.
+5. Prefer `Start Forever Engine` when you want the app to keep the monitor-only lifecycle moving without babysitting.
 6. If you manually place a Braiins canary, record it in `Manual Exposure` immediately.
 
 Do not start extra terminal watches while the app says a watch, cooldown, or manual exposure owns control.
 
-## Who Is In Control?
+## Who Owns Control?
 
 The app has one ownership model:
 
 1. `The app is ready`: you may start the enabled passive action.
-2. `A watch run owns control`: leave it alone until it finishes.
-3. `Cooldown owns control`: wait until the shown earliest action time.
-4. `Manual exposure owns control`: supervise the real-world Braiins/OCEAN position and do not start new experiments.
-5. `The app is busy`: a monitor-only backend operation is running right now.
+2. `Forever engine`: the background monitor engine owns passive sampling; leave it alone.
+3. `A watch run owns control`: leave it alone until it finishes.
+4. `Cooldown owns control`: wait until the shown earliest action time.
+5. `Manual exposure owns control`: supervise the real-world Braiins/OCEAN position and do not start new experiments.
+6. `The app is busy`: a monitor-only backend operation is running right now.
 
 This is the anti-babysitting rule: if the app says something else owns control, your workload is zero unless you are supervising a real manual exposure.
 
@@ -46,7 +47,8 @@ It can:
 3. Run passive watch-only research windows.
 4. Write run reports under `reports/`.
 5. Track manually executed Braiins exposure that you enter yourself.
-6. Resume from the same SQLite state after a crash or reboot.
+6. Start or stop a repo-local forever monitor engine.
+7. Resume from the same SQLite state after a crash or reboot.
 
 ## Native Mac App
 
@@ -66,11 +68,12 @@ This creates `macos/build/Braiins Ratchet.app`. After that, you can open that ap
 
 The app is organized as:
 
-1. `Mission Control`: current decision, control ownership, next passive action, progress, evidence, and plain English interpretation.
-2. `Research Map`: visual autoresearch stage model.
-3. `Manual Exposure`: record or close manually executed Braiins exposure.
-4. `Advanced`: raw cockpit, report, and ledger artifacts for diagnostics.
-5. `Ratchet Lecture`: the general observe, hypothesize, bound, mature, adapt method.
+1. `Mission Control`: current decision, control ownership, forever engine controls, cooldown progress, and evidence.
+2. `Mining Stack`: the Umbrel, Knots, Datum, OCEAN, and Braiins interplay.
+3. `Ratchet`: the observe, price, watch, mature, adapt learning loop.
+4. `Strategy Lab`: shadow order, expected net, breakeven, and loss boundary.
+5. `Manual Exposure`: record or close manually executed Braiins exposure.
+6. `Evidence Vault`: raw cockpit, report, and ledger artifacts for diagnostics.
 
 ## Research Pathway
 
@@ -104,7 +107,7 @@ Each completed watch creates one run report:
 reports/run-*.md
 ```
 
-Use the app's `Advanced` tab when you need raw artifacts. Mission Control intentionally hides raw logs during normal operation.
+Use the app's `Evidence Vault` tab when you need raw artifacts. Mission Control intentionally hides raw logs during normal operation.
 
 ## Advanced Fallback Commands
 
@@ -115,6 +118,9 @@ Use these only if the native app cannot be opened or you are debugging:
 ./scripts/ratchet once
 ./scripts/ratchet watch 2
 ./scripts/ratchet supervise
+./scripts/ratchet engine status
+./scripts/ratchet engine start
+./scripts/ratchet engine stop
 ./scripts/ratchet position list
 ./scripts/ratchet report
 ./scripts/ratchet experiments

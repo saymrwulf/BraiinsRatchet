@@ -15,14 +15,15 @@ This builds `macos/build/Braiins Ratchet.app` and opens the packaged app. Use th
 ## Current Scope
 
 - Native macOS SwiftUI control room.
-- Mission Control with one explicit next action.
-- Research Map with the full ratchet pathway.
-- Direct watch-only controls without an approval gate.
+- Mission Control with one explicit decision and control owner.
+- Mining Stack view for Umbrel, Knots, Datum, OCEAN, and Braiins interplay.
+- Ratchet view for the full autoresearch pathway.
+- Strategy Lab for shadow orders and loss boundaries.
+- Forever Engine controls for the monitor-only background lifecycle.
 - Manual exposure recording and closing controls.
-- Advanced panel for raw artifacts and backend diagnostics.
-- Ratchet Lecture for the general autoresearch method.
+- Evidence Vault for raw artifacts and backend diagnostics.
 - Monitor-only. It never places Braiins orders.
 
 ## Product Direction
 
-The next production step is wiring LaunchAgent controls for the durable supervisor while keeping Mission Control domain-first.
+The next production step is optional LaunchAgent integration. The current app already starts and stops a repo-local background monitor engine.

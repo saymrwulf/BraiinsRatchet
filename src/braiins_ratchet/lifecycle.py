@@ -7,7 +7,7 @@ import time
 
 from .config import AppConfig
 from .experiments import finish_experiment, start_experiment
-from .guidance import POST_WATCH_COOLDOWN_MINUTES, build_operator_cockpit
+from .guidance import POST_WATCH_COOLDOWN_MINUTES, build_operator_cockpit, get_operator_state
 from .monitor import run_cycle
 from .storage import connect, init_db
 
@@ -146,6 +146,13 @@ def run_supervisor(config: AppConfig, *, once: bool = False) -> int:
                     return 0
                 time.sleep(60)
                 continue
+            report_cooldown_seconds = _sync_recent_watch_cooldown(conn)
+            if report_cooldown_seconds > 0:
+                _print_timer("Report cooldown", report_cooldown_seconds)
+                if once:
+                    return 0
+                _sleep_with_progress(report_cooldown_seconds)
+                continue
             state = _read_state(conn)
             phase = state.get("phase", "idle")
             next_action_utc = state.get("next_action_utc")
@@ -225,6 +232,35 @@ def _run_watch_stage(config: AppConfig) -> str:
         )
         _record_event(conn, "watch_report_written", {"run_id": experiment.run_id, "report": report_path})
     return experiment.run_id
+
+
+def _sync_recent_watch_cooldown(conn) -> int:
+    operator_state = get_operator_state(conn)
+    completed = operator_state.completed_watch
+    if completed is None or completed.remaining_minutes <= 0:
+        return 0
+
+    state = _read_state(conn)
+    if state.get("phase") != "cooldown" or state.get("next_action_utc") != completed.earliest_action_utc:
+        _write_state(
+            conn,
+            {
+                "phase": "cooldown",
+                "next_action_utc": completed.earliest_action_utc,
+                "last_run_id": completed.report_path,
+                "message": "recent watch report is cooling down before next research stage",
+            },
+        )
+        _record_event(
+            conn,
+            "cooldown_synced_from_report",
+            {
+                "report": completed.report_path,
+                "next_action_utc": completed.earliest_action_utc,
+                "remaining_minutes": completed.remaining_minutes,
+            },
+        )
+    return completed.remaining_minutes * 60
 
 
 def open_manual_position(
