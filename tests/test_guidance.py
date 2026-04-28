@@ -2,6 +2,7 @@ from decimal import Decimal
 from datetime import UTC, datetime
 import sqlite3
 import unittest
+from unittest.mock import patch
 
 from braiins_ratchet.guidance import (
     CompletedWatch,
@@ -19,7 +20,8 @@ class GuidanceTests(unittest.TestCase):
         conn = sqlite3.connect(":memory:")
         init_db(conn)
 
-        text = build_operator_cockpit(conn)
+        with _isolated_operator_files():
+            text = build_operator_cockpit(conn)
 
         self.assertIn("Braiins Ratchet Cockpit", text)
         self.assertIn("./scripts/ratchet setup", text)
@@ -61,7 +63,8 @@ class GuidanceTests(unittest.TestCase):
             ),
         )
 
-        text = build_operator_cockpit(conn)
+        with _isolated_operator_files():
+            text = build_operator_cockpit(conn)
 
         self.assertIn("Latest strategy action: manual_canary", text)
         self.assertIn("./scripts/ratchet watch 2", text)
@@ -155,6 +158,15 @@ def _completed_watch(age_minutes: int) -> CompletedWatch:
         cooldown_minutes=360,
         earliest_action_utc="2026-04-27T22:00:00+00:00",
         earliest_action_local="2026-04-28T00:00:00+02:00",
+    )
+
+
+def _isolated_operator_files():
+    return patch.multiple(
+        "braiins_ratchet.guidance",
+        _active_watch=lambda: None,
+        _latest_report=lambda: None,
+        _running_runs=lambda: [],
     )
 
 

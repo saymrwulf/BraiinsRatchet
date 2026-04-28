@@ -146,7 +146,7 @@ The app includes controls to record and close manual exposure, but the same rule
 
 The app is organized as:
 
-1. `Mission Control`: one exact next action, cooldown, metrics, and automation approval.
+1. `Mission Control`: one exact next action, cooldown, metrics, and direct watch-only controls.
 2. `Research Map`: visual autoresearch stage model.
 3. `Manual Exposure`: record or close manually executed Braiins exposure.
 4. `Reports`: raw cockpit, report, and ledger artifacts.

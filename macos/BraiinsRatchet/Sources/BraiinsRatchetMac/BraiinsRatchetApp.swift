@@ -24,7 +24,6 @@ struct ContentView: View {
     @State private var lastCommand = "app-state"
     @State private var errorMessage: String?
     @State private var isRunning = false
-    @State private var showAutomationApproval = false
     @State private var glow = false
     @State private var manualDescription = ""
     @State private var maturityHours = "72"
@@ -72,18 +71,6 @@ struct ContentView: View {
                 glow = true
             }
         }
-        .confirmationDialog(
-            "Approve monitor-only automation?",
-            isPresented: $showAutomationApproval,
-            titleVisibility: .visible
-        ) {
-            Button("Approve and run monitor-only plan") {
-                Task { await runTextCommand(label: "pipeline --yes", ["pipeline", "--yes"], refreshAfterwards: true) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(appState?.automationPlan.title ?? "The app will run only the printed monitor-only plan. It will not place Braiins orders.")
-        }
     }
 
     @ViewBuilder
@@ -96,8 +83,7 @@ struct ContentView: View {
                 isRunning: isRunning,
                 glow: glow,
                 refresh: { Task { await refreshAppState() } },
-                previewAutomation: { Task { await runTextCommand(label: "pipeline preview", ["pipeline"], input: "no\n") } },
-                approveAutomation: { showAutomationApproval = true }
+                runPassiveAction: runPassiveAction
             )
         case .map:
             ResearchMapView(appState: appState, glow: glow)
@@ -212,6 +198,26 @@ struct ContentView: View {
             await runTextCommand(label: "position close", ["position", "close", positionId], refreshAfterwards: true)
         }
     }
+
+    private func runPassiveAction() {
+        guard let plan = appState?.automationPlan else {
+            Task { await refreshAppState() }
+            return
+        }
+
+        switch plan.kind {
+        case "once_now":
+            Task { await runTextCommand(label: "once", ["once"], refreshAfterwards: true) }
+        case "watch_2h":
+            Task { await runTextCommand(label: "watch 2", ["watch", "2"], refreshAfterwards: true) }
+        case "wait_then_once" where plan.waitSeconds <= 0:
+            Task { await runTextCommand(label: "once", ["once"], refreshAfterwards: true) }
+        case "report_only":
+            Task { await runTextCommand(label: "report", ["report"]) }
+        default:
+            Task { await refreshAppState() }
+        }
+    }
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
@@ -250,8 +256,7 @@ struct MissionControlView: View {
     let isRunning: Bool
     let glow: Bool
     let refresh: () -> Void
-    let previewAutomation: () -> Void
-    let approveAutomation: () -> Void
+    let runPassiveAction: () -> Void
 
     var body: some View {
         ScrollView {
@@ -263,11 +268,10 @@ struct MissionControlView: View {
                     VStack(spacing: 14) {
                         AutoresearchOrb(phase: ResearchPhase.from(appState), glow: glow)
                             .frame(height: 250)
-                        AutomationCard(
+                        PassiveRunCard(
                             plan: appState?.automationPlan,
                             isRunning: isRunning,
-                            preview: previewAutomation,
-                            approve: approveAutomation
+                            run: runPassiveAction
                         )
                     }
                     .frame(width: 350)
@@ -341,52 +345,96 @@ struct HeroPanel: View {
     }
 }
 
-struct AutomationCard: View {
+struct PassiveRunCard: View {
     let plan: AutomationPlanPayload?
     let isRunning: Bool
-    let preview: () -> Void
-    let approve: () -> Void
+    let run: () -> Void
 
     var body: some View {
         GlassPanel {
             VStack(alignment: .leading, spacing: 14) {
-                Label("Automation Gate", systemImage: "checkmark.seal")
+                Label("Watch-only Control", systemImage: "binoculars")
                     .font(.headline)
-                Text(plan?.title ?? "Load state to see the next safe automation step.")
+                Text(title)
                     .font(.title3.weight(.bold))
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(Array((plan?.steps ?? []).enumerated()), id: \.offset) { index, step in
-                        HStack(alignment: .top, spacing: 8) {
-                            Text("\(index + 1)")
-                                .font(.caption.weight(.black))
-                                .foregroundStyle(.white)
-                                .frame(width: 20, height: 20)
-                                .background(.green.opacity(0.75), in: Circle())
-                            Text(step)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
 
-                HStack {
-                    Button("Preview") {
-                        preview()
-                    }
-                    .buttonStyle(.bordered)
-                    Button("Approve") {
-                        approve()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canApprove || isRunning)
+                Button(buttonTitle) {
+                    run()
                 }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canRun || isRunning)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("No owner-token order placement", systemImage: "lock")
+                    Label("Manual Braiins actions stay outside the app", systemImage: "hand.point.up.left")
+                    Label("Watch runs only collect public/OCEAN data", systemImage: "antenna.radiowaves.left.and.right")
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
             }
         }
     }
 
-    private var canApprove: Bool {
-        guard let kind = plan?.kind else { return false }
-        return !["no_action", "external_wait", "manual_exposure_hold"].contains(kind)
+    private var title: String {
+        guard let plan else { return "Load state" }
+        switch plan.kind {
+        case "once_now": return "Refresh one sample"
+        case "watch_2h": return "Start passive 2-hour watch"
+        case "wait_then_once": return plan.waitSeconds > 0 ? "Cooldown in progress" : "Cooldown complete"
+        case "report_only": return "Read report"
+        case "external_wait": return "Existing watch owns control"
+        case "manual_exposure_hold": return "Manual exposure hold"
+        default: return "No passive action"
+        }
+    }
+
+    private var detail: String {
+        guard let plan else { return "The app is reading the lifecycle state." }
+        switch plan.kind {
+        case "once_now":
+            return "This collects exactly one fresh monitor sample, then stops."
+        case "watch_2h":
+            return "This starts one bounded watch-only run. It does not spend BTC or place Braiins orders."
+        case "wait_then_once":
+            if plan.waitSeconds > 0 {
+                return "The previous watch is still maturing. Do not run another identical watch yet."
+            }
+            return "The cooldown has ended; one fresh sample is now useful."
+        case "report_only":
+            return "The next useful step is reading the full report."
+        case "external_wait":
+            return "A watch is already running elsewhere. Starting another one would create duplicate state."
+        case "manual_exposure_hold":
+            return "A real manual position is active. The app should supervise, not create new experiments."
+        default:
+            return "No watch-only action is useful right now."
+        }
+    }
+
+    private var buttonTitle: String {
+        guard let plan else { return "Refresh State" }
+        switch plan.kind {
+        case "once_now": return "Refresh Now"
+        case "watch_2h": return "Start Watch-only Run"
+        case "wait_then_once": return plan.waitSeconds > 0 ? "Wait" : "Refresh Now"
+        case "report_only": return "Open Report"
+        default: return "Refresh State"
+        }
+    }
+
+    private var canRun: Bool {
+        guard let plan else { return true }
+        switch plan.kind {
+        case "once_now", "watch_2h", "report_only":
+            return true
+        case "wait_then_once":
+            return plan.waitSeconds <= 0
+        default:
+            return false
+        }
     }
 }
 

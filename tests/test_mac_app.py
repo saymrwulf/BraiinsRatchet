@@ -55,3 +55,7 @@ class MacAppPackagingTest(unittest.TestCase):
         self.assertIn("AutoresearchOrb", text)
         self.assertIn("AppStatePayload", text)
         self.assertIn("loadAppState", text)
+        self.assertIn("PassiveRunCard", text)
+        self.assertNotIn("Automation Gate", text)
+        self.assertNotIn("confirmationDialog", text)
+        self.assertNotIn("showAutomationApproval", text)

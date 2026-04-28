@@ -17,7 +17,7 @@ This builds `macos/build/Braiins Ratchet.app` and opens the packaged app. Use th
 - Native macOS SwiftUI control room.
 - Mission Control with one explicit next action.
 - Research Map with the full ratchet pathway.
-- Monitor-only automation approval gate.
+- Direct watch-only controls without an approval gate.
 - Manual exposure recording and closing controls.
 - Reports panel for raw artifacts.
 - Ratchet Lecture for the general autoresearch method.

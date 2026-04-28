@@ -39,13 +39,13 @@ Source: <https://media.nngroup.com/media/articles/attachments/Heuristic_Summary1
 The native app now treats the Python engine as a structured state provider, not as a terminal to embed. The new `app-state` command returns JSON with:
 
 - Current operator state.
-- Automation plan.
+- Passive action plan.
 - Cockpit text for audit/debug.
 - Latest OCEAN, Braiins, and strategy proposal payloads.
 
 The SwiftUI app turns that into native surfaces:
 
-- `Mission Control`: one exact action, cooldown, approval gate, and metrics.
+- `Mission Control`: one exact action, cooldown, direct watch-only controls, and metrics.
 - `Research Map`: the ratchet pathway as a visual stage model.
 - `Manual Exposure`: the ledger for real manually placed Braiins exposure.
 - `Reports`: raw artifacts kept available but no longer primary.
