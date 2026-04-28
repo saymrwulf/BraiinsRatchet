@@ -111,6 +111,20 @@ reports/run-*.md
 
 Use the app's `Evidence` tab when you need raw artifacts. Flight Deck intentionally hides raw logs during normal operation.
 
+## Full Guides
+
+Read the user guide when you want the complete noob-friendly story:
+
+```bash
+./scripts/ratchet guide
+```
+
+Read the operator guide when you need installation, migration to another Mac, backup, recovery, or architecture:
+
+```bash
+./scripts/ratchet operator-guide
+```
+
 ## Advanced Fallback Commands
 
 Use these only if the native app cannot be opened or you are debugging:
@@ -126,6 +140,8 @@ Use these only if the native app cannot be opened or you are debugging:
 ./scripts/ratchet position list
 ./scripts/ratchet report
 ./scripts/ratchet experiments
+./scripts/ratchet guide
+./scripts/ratchet operator-guide
 ```
 
 The preferred workflow remains the native app.

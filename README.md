@@ -74,10 +74,16 @@ To embed an already completed manual session from stored snapshots:
 ./scripts/ratchet retro 2026-04-25T19:08:00+00:00 2026-04-25T21:05:00+00:00
 ```
 
-For the human operating guide:
+For the noob-friendly user guide:
 
 ```bash
-./scripts/ratchet explain
+./scripts/ratchet guide
+```
+
+For the operator installation, migration, recovery, and architecture handbook:
+
+```bash
+./scripts/ratchet operator-guide
 ```
 
 Import a manual Braiins market snapshot:
@@ -120,6 +126,8 @@ The Braiins market report distinguishes visible top-of-book from executable dept
 
 - `PROGRAM.md`: research charter and ratchet rules.
 - `START_HERE.md`: no-prior-knowledge operating instructions.
+- `docs/USER_GUIDE.md`: app-first noob guide for the complete autoresearch loop.
+- `docs/OPERATOR_GUIDE.md`: architecture, installation, migration, backup, recovery, and diagnostics.
 - `SECURITY.md`: token, computer, and trading safety guardrails.
 - `docs/BRAIINS_PUBLIC_MARKET.md`: public market collector behavior.
 - `docs/RATCHET_OPERATIONS.md`: day-to-day monitor cycle.

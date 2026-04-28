@@ -13,6 +13,10 @@ Use `./scripts/ratchet raw-cycle` only when debugging the machine-readable cycle
 
 Use `./scripts/ratchet app` to build and open the packaged native macOS app. It creates `macos/build/Braiins Ratchet.app`; `swift run` is only a developer fallback.
 
+Use `./scripts/ratchet guide` for the user-facing operating story.
+
+Use `./scripts/ratchet operator-guide` for architecture, installation, migration, backup, recovery, and diagnostics.
+
 The raw Python CLI is documented below for debugging and development.
 
 All raw commands should be run from the repository root.
@@ -30,6 +34,21 @@ Prints the cockpit: current state, exact next operator action, interpretation, a
 ```bash
 PYTHONPATH=src ./.venv/bin/python -m braiins_ratchet.cli next
 ```
+
+## Wrapper Guide Commands
+
+These are wrapper commands, not raw Python subcommands:
+
+```bash
+./scripts/ratchet guide
+./scripts/ratchet user-guide
+./scripts/ratchet explain
+./scripts/ratchet operator-guide
+```
+
+`guide`, `user-guide`, and `explain` print `docs/USER_GUIDE.md`.
+
+`operator-guide` prints `docs/OPERATOR_GUIDE.md`.
 
 ## `pipeline`
 

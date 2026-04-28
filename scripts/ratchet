@@ -23,7 +23,9 @@ Commands:
   retro SINCE [UNTIL] Write a retroactive report from stored snapshots.
   raw-cycle          Run one full monitor cycle and print raw JSON.
   test               Run the network-free test suite.
-  explain            Print the operating procedure and interpretation guide.
+  guide              Print the noob-friendly user guide.
+  operator-guide     Print the installation, migration, and recovery guide.
+  explain            Alias for guide.
 
 Examples:
   ./scripts/ratchet
@@ -37,6 +39,8 @@ Examples:
   ./scripts/ratchet position list
   ./scripts/ratchet report
   ./scripts/ratchet experiments
+  ./scripts/ratchet guide
+  ./scripts/ratchet operator-guide
   ./scripts/ratchet retro 2026-04-25T19:08:00+00:00 2026-04-25T21:05:00+00:00
 USAGE
 }
@@ -169,6 +173,10 @@ cmd_test() {
 }
 
 cmd_explain() {
+  cat "$ROOT_DIR/docs/USER_GUIDE.md"
+}
+
+cmd_operator_guide() {
   cat "$ROOT_DIR/docs/OPERATOR_GUIDE.md"
 }
 
@@ -193,7 +201,8 @@ main() {
     retro) cmd_retro "$@" ;;
     raw-cycle) cmd_raw_cycle "$@" ;;
     test) cmd_test "$@" ;;
-    explain) cmd_explain "$@" ;;
+    guide|user-guide|explain) cmd_explain "$@" ;;
+    operator-guide|operator) cmd_operator_guide "$@" ;;
     help|-h|--help) usage ;;
     *)
       echo "Unknown command: $command" >&2
