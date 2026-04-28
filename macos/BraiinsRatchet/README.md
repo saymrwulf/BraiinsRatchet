@@ -1,8 +1,8 @@
 # Braiins Ratchet Mac
 
-Native SwiftUI shell for the durable Braiins Ratchet lifecycle engine.
+Native SwiftUI control room for the durable Braiins Ratchet lifecycle engine.
 
-The Python supervisor remains the source of truth. This app reads the same repository-local SQLite state through `./scripts/ratchet`.
+The Python lifecycle engine remains the source of truth. This app reads the same repository-local SQLite state through structured app state, not by making Mission Control a terminal transcript.
 
 ## Normal Run
 
@@ -19,10 +19,10 @@ This builds `macos/build/Braiins Ratchet.app` and opens the packaged app. Use th
 - Research Map with the full ratchet pathway.
 - Direct watch-only controls without an approval gate.
 - Manual exposure recording and closing controls.
-- Reports panel for raw artifacts.
+- Advanced panel for raw artifacts and backend diagnostics.
 - Ratchet Lecture for the general autoresearch method.
 - Monitor-only. It never places Braiins orders.
 
 ## Product Direction
 
-The next production step is wiring LaunchAgent controls for the durable supervisor.
+The next production step is wiring LaunchAgent controls for the durable supervisor while keeping Mission Control domain-first.

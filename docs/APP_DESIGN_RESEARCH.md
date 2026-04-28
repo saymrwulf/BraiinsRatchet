@@ -48,7 +48,7 @@ The SwiftUI app turns that into native surfaces:
 - `Mission Control`: one exact action, cooldown, direct watch-only controls, and metrics.
 - `Research Map`: the ratchet pathway as a visual stage model.
 - `Manual Exposure`: the ledger for real manually placed Braiins exposure.
-- `Reports`: raw artifacts kept available but no longer primary.
+- `Advanced`: raw artifacts kept available but no longer primary.
 - `Ratchet Lecture`: a teachable model of observe, hypothesize, bound, mature, adapt.
 
 ## The Ratchet UX Rule

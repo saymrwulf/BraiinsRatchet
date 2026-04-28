@@ -79,7 +79,6 @@ struct ContentView: View {
         case .mission:
             MissionControlView(
                 appState: appState,
-                transcript: transcript,
                 isRunning: isRunning,
                 glow: glow,
                 refresh: { Task { await refreshAppState() } },
@@ -98,8 +97,8 @@ struct ContentView: View {
                 close: closeManualExposure,
                 list: { Task { await runTextCommand(label: "position list", ["position", "list"], refreshAfterwards: true) } }
             )
-        case .reports:
-            ReportsView(
+        case .advanced:
+            AdvancedView(
                 transcript: transcript,
                 lastCommand: lastCommand,
                 isRunning: isRunning,
@@ -224,7 +223,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case mission
     case map
     case exposure
-    case reports
+    case advanced
     case lecture
 
     var id: String { rawValue }
@@ -234,7 +233,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .mission: "Mission Control"
         case .map: "Research Map"
         case .exposure: "Manual Exposure"
-        case .reports: "Reports"
+        case .advanced: "Advanced"
         case .lecture: "Ratchet Lecture"
         }
     }
@@ -244,7 +243,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .mission: "scope"
         case .map: "point.3.connected.trianglepath.dotted"
         case .exposure: "lock.shield"
-        case .reports: "doc.text.magnifyingglass"
+        case .advanced: "wrench.and.screwdriver"
         case .lecture: "graduationcap"
         }
     }
@@ -252,7 +251,6 @@ enum AppSection: String, CaseIterable, Identifiable {
 
 struct MissionControlView: View {
     let appState: AppStatePayload?
-    let transcript: String
     let isRunning: Bool
     let glow: Bool
     let refresh: () -> Void
@@ -268,6 +266,7 @@ struct MissionControlView: View {
                     VStack(spacing: 14) {
                         AutoresearchOrb(phase: ResearchPhase.from(appState), glow: glow)
                             .frame(height: 250)
+                        ControlOwnershipCard(appState: appState, isRunning: isRunning)
                         PassiveRunCard(
                             plan: appState?.automationPlan,
                             isRunning: isRunning,
@@ -277,9 +276,9 @@ struct MissionControlView: View {
                     .frame(width: 350)
                 }
 
-                MetricsDeck(appState: appState)
+                EvidenceDeck(appState: appState)
                 ResearchTimeline(appState: appState, compact: false)
-                PlainEnglishCard(appState: appState, transcript: transcript)
+                PlainEnglishCard(appState: appState)
             }
             .padding(28)
         }
@@ -312,7 +311,7 @@ struct HeroPanel: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Do This Now")
+                    Text("Current Decision")
                         .font(.caption.weight(.heavy))
                         .textCase(.uppercase)
                         .foregroundStyle(.secondary)
@@ -322,17 +321,6 @@ struct HeroPanel: View {
                     Text(directive.detail)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.primary)
-
-                    if let command = directive.command {
-                        HStack(spacing: 10) {
-                            Image(systemName: "terminal")
-                            Text(command)
-                                .font(.system(.body, design: .monospaced).weight(.semibold))
-                        }
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
                 }
 
                 if let watch = appState?.operatorState.completedWatch {
@@ -345,6 +333,53 @@ struct HeroPanel: View {
     }
 }
 
+struct ControlOwnershipCard: View {
+    let appState: AppStatePayload?
+    let isRunning: Bool
+
+    var body: some View {
+        GlassPanel(padding: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Who Is In Control", systemImage: symbol)
+                    .font(.headline)
+                Text(title)
+                    .font(.title3.weight(.bold))
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var symbol: String {
+        if isRunning { return "gearshape.2" }
+        guard let state = appState?.operatorState else { return "questionmark.circle" }
+        if state.activeWatch != nil { return "binoculars" }
+        if !state.activeManualPositions.isEmpty { return "lock.shield" }
+        if state.completedWatch != nil { return "timer" }
+        return "scope"
+    }
+
+    private var title: String {
+        if isRunning { return "The app is busy" }
+        guard let state = appState?.operatorState else { return "Loading state" }
+        if state.activeWatch != nil { return "A watch run owns control" }
+        if !state.activeManualPositions.isEmpty { return "Manual exposure owns control" }
+        if state.completedWatch != nil { return "Cooldown owns control" }
+        return "The app is ready"
+    }
+
+    private var detail: String {
+        if isRunning { return "A monitor-only operation is running. Do not start a competing action." }
+        guard let state = appState?.operatorState else { return "Reading the lifecycle database." }
+        if state.activeWatch != nil { return "Let the watch finish; duplicate watches corrupt the research trail." }
+        if !state.activeManualPositions.isEmpty { return "A real-world position is active, so new experiments stay blocked." }
+        if let watch = state.completedWatch { return "Wait until \(watch.earliestActionLocal) before the next useful sample." }
+        return "No active watch, no manual exposure, and no cooldown block."
+    }
+}
+
 struct PassiveRunCard: View {
     let plan: AutomationPlanPayload?
     let isRunning: Bool
@@ -353,7 +388,7 @@ struct PassiveRunCard: View {
     var body: some View {
         GlassPanel {
             VStack(alignment: .leading, spacing: 14) {
-                Label("Watch-only Control", systemImage: "binoculars")
+                Label("Next Passive Action", systemImage: "arrow.forward.circle")
                     .font(.headline)
                 Text(title)
                     .font(.title3.weight(.bold))
@@ -419,7 +454,7 @@ struct PassiveRunCard: View {
         switch plan.kind {
         case "once_now": return "Refresh Now"
         case "watch_2h": return "Start Watch-only Run"
-        case "wait_then_once": return plan.waitSeconds > 0 ? "Wait" : "Refresh Now"
+        case "wait_then_once": return plan.waitSeconds > 0 ? "Cooldown Active" : "Refresh Now"
         case "report_only": return "Open Report"
         default: return "Refresh State"
         }
@@ -438,43 +473,50 @@ struct PassiveRunCard: View {
     }
 }
 
-struct MetricsDeck: View {
+struct EvidenceDeck: View {
     let appState: AppStatePayload?
 
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 14) {
             MetricTile(
-                title: "Market Freshness",
-                value: freshnessText,
-                detail: appState?.operatorState.latestMarketTimestamp ?? "no sample",
-                symbol: "clock"
+                title: "Braiins Market",
+                value: marketPrice,
+                detail: marketDetail,
+                symbol: "chart.line.uptrend.xyaxis"
             )
             MetricTile(
-                title: "Strategy Action",
-                value: appState?.operatorState.action ?? "none",
+                title: "Model Net",
+                value: proposalValue("expected_net_btc", fallback: "n/a"),
                 detail: actionDetail,
-                symbol: "target"
+                symbol: "plus.forwardslash.minus"
             )
             MetricTile(
-                title: "Manual Exposure",
-                value: exposureText,
-                detail: "Blocks new experiments while active",
-                symbol: "shield.lefthalf.filled"
+                title: "OCEAN Pool",
+                value: oceanValue("pool_hashrate_eh_s", suffix: " EH/s"),
+                detail: oceanValue("network_difficulty_t", prefix: "difficulty "),
+                symbol: "water.waves"
             )
             MetricTile(
-                title: "Latest Report",
-                value: appState?.operatorState.latestReport?.lastPathComponent ?? "none",
-                detail: appState?.operatorState.latestReport ?? "No artifact yet",
-                symbol: "doc.text"
+                title: "Evidence",
+                value: evidenceValue,
+                detail: evidenceDetail,
+                symbol: "archivebox"
             )
         }
     }
 
-    private var freshnessText: String {
-        guard let state = appState?.operatorState else { return "loading" }
-        if state.isFresh { return "fresh" }
-        if let minutes = state.freshnessMinutes { return "stale \(minutes)m" }
-        return "unknown"
+    private var marketPrice: String {
+        if let fillable = appState?.latest.market?["fillable_price_btc_per_eh_day"]?.description, fillable != "n/a" {
+            return fillable
+        }
+        return appState?.latest.market?["best_ask_btc_per_eh_day"]?.description ?? "n/a"
+    }
+
+    private var marketDetail: String {
+        let freshness = appState?.operatorState.freshnessMinutes.map { "\($0)m old" } ?? "age unknown"
+        let ask = appState?.latest.market?["best_ask_btc_per_eh_day"]?.description ?? "n/a"
+        let last = appState?.latest.market?["last_price_btc_per_eh_day"]?.description ?? "n/a"
+        return "\(freshness), ask \(ask), last \(last)"
     }
 
     private var actionDetail: String {
@@ -484,9 +526,26 @@ struct MetricsDeck: View {
         return "No useful market action"
     }
 
-    private var exposureText: String {
+    private var evidenceValue: String {
         let count = appState?.operatorState.activeManualPositions.count ?? 0
-        return count == 0 ? "none" : "\(count) active"
+        if count > 0 { return "\(count) active exposure" }
+        return appState?.operatorState.latestReport?.lastPathComponent ?? "none"
+    }
+
+    private var evidenceDetail: String {
+        if let watch = appState?.operatorState.completedWatch {
+            return "cooldown \(watch.remainingMinutes)m remaining"
+        }
+        return appState?.operatorState.latestReport ?? "No artifact yet"
+    }
+
+    private func proposalValue(_ key: String, fallback: String) -> String {
+        appState?.latest.proposal?[key]?.description ?? fallback
+    }
+
+    private func oceanValue(_ key: String, prefix: String = "", suffix: String = "") -> String {
+        guard let value = appState?.latest.ocean?[key]?.description else { return "n/a" }
+        return "\(prefix)\(value)\(suffix)"
     }
 }
 
@@ -617,7 +676,6 @@ struct TimelineNode: View {
 
 struct PlainEnglishCard: View {
     let appState: AppStatePayload?
-    let transcript: String
 
     var body: some View {
         GlassPanel {
@@ -799,7 +857,7 @@ struct ActiveExposureList: View {
     }
 }
 
-struct ReportsView: View {
+struct AdvancedView: View {
     let transcript: String
     let lastCommand: String
     let isRunning: Bool
@@ -811,9 +869,9 @@ struct ReportsView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Reports")
+                    Text("Advanced")
                         .font(.system(size: 36, weight: .black, design: .rounded))
-                    Text("Raw artifacts remain here, away from the noob cockpit.")
+                    Text("Raw artifacts and backend diagnostics live here, away from Mission Control.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -824,7 +882,7 @@ struct ReportsView: View {
 
             GlassPanel {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label(lastCommand, systemImage: "terminal")
+                    Label(lastCommand, systemImage: "wrench.and.screwdriver")
                         .font(.headline)
                     ScrollView {
                         Text(transcript)
@@ -1095,37 +1153,35 @@ enum ResearchPhase {
 struct Directive {
     let title: String
     let detail: String
-    let command: String?
     let color: Color
 
     static func from(_ appState: AppStatePayload?) -> Directive {
         guard let appState else {
-            return Directive(title: "LOAD STATE", detail: "The app is reading the ratchet lifecycle database.", command: nil, color: .secondary)
+            return Directive(title: "LOAD STATE", detail: "The app is reading the ratchet lifecycle database.", color: .secondary)
         }
         if let watch = appState.operatorState.completedWatch {
             return Directive(
                 title: "STOP",
                 detail: "Wait until \(watch.earliestActionLocal). Repeating the same watch now would be loop-chasing.",
-                command: "./scripts/ratchet once",
                 color: .orange
             )
         }
         if appState.operatorState.activeWatch != nil {
-            return Directive(title: "WAIT", detail: "A watch is already running. Do not start another one.", command: nil, color: .orange)
+            return Directive(title: "WAIT", detail: "A watch is already running. Do not start another one.", color: .orange)
         }
         if !appState.operatorState.activeManualPositions.isEmpty {
-            return Directive(title: "HOLD", detail: "Manual Braiins exposure is active. Supervise it; do not start new experiments.", command: "./scripts/ratchet supervise --status", color: .orange)
+            return Directive(title: "HOLD", detail: "Manual Braiins exposure is active. Supervise it; do not start new experiments.", color: .orange)
         }
         if !appState.operatorState.hasOcean || !appState.operatorState.hasMarket || !appState.operatorState.isFresh {
-            return Directive(title: "REFRESH", detail: "The latest market state is stale or missing. Collect exactly one fresh sample.", command: "./scripts/ratchet once", color: .green)
+            return Directive(title: "REFRESH", detail: "The latest market state is stale or missing. Collect exactly one fresh sample.", color: .green)
         }
         if appState.operatorState.action == "manual_canary" {
-            return Directive(title: "WATCH", detail: "Run one bounded passive watch. This buys information, not a promise of profit.", command: "./scripts/ratchet watch 2", color: .green)
+            return Directive(title: "WATCH", detail: "Run one bounded passive watch. This buys information, not a promise of profit.", color: .green)
         }
         if appState.operatorState.action == "manual_bid" {
-            return Directive(title: "REVIEW", detail: "Read the full report before any manual Braiins action.", command: "./scripts/ratchet report", color: .green)
+            return Directive(title: "REVIEW", detail: "Read the full report before any manual Braiins action.", color: .green)
         }
-        return Directive(title: "OBSERVE", detail: "No useful action window is visible right now.", command: nil, color: .secondary)
+        return Directive(title: "OBSERVE", detail: "No useful action window is visible right now.", color: .secondary)
     }
 }
 

@@ -45,6 +45,16 @@ class MacAppPackagingTest(unittest.TestCase):
             self.assertIn("./scripts/ratchet app", text)
             self.assertNotIn("swift run BraiinsRatchetMac", text)
 
+    def test_start_here_is_app_first_and_not_pipeline_first(self):
+        text = (ROOT / "START_HERE.md").read_text()
+
+        self.assertIn("This project now has one normal operator entry point", text)
+        self.assertIn("./scripts/ratchet app", text)
+        self.assertIn("The app is the control room", text)
+        self.assertIn("Who Is In Control", text)
+        self.assertNotIn("Controlled Automation", text)
+        self.assertNotIn("./scripts/ratchet pipeline", text)
+
     def test_swift_app_uses_native_dashboard_not_raw_terminal_as_primary_ui(self):
         source = ROOT / "macos" / "BraiinsRatchet" / "Sources" / "BraiinsRatchetMac" / "BraiinsRatchetApp.swift"
         text = source.read_text()
@@ -56,6 +66,11 @@ class MacAppPackagingTest(unittest.TestCase):
         self.assertIn("AppStatePayload", text)
         self.assertIn("loadAppState", text)
         self.assertIn("PassiveRunCard", text)
+        self.assertIn("ControlOwnershipCard", text)
+        self.assertIn("EvidenceDeck", text)
+        self.assertIn("AdvancedView", text)
+        self.assertIn("Current Decision", text)
+        self.assertNotIn("Do This Now", text)
         self.assertNotIn("Automation Gate", text)
         self.assertNotIn("confirmationDialog", text)
         self.assertNotIn("showAutomationApproval", text)

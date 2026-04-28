@@ -1,18 +1,12 @@
 # Start Here
 
-This project now has one operator entry point:
+This project now has one normal operator entry point:
 
 ```bash
-./scripts/ratchet
+./scripts/ratchet app
 ```
 
-That is the same as:
-
-```bash
-./scripts/ratchet next
-```
-
-It prints the cockpit: current state, exact next action, interpretation, reference commands, and ratchet rule.
+That command builds and opens the native macOS app. The app is the control room. The terminal is only the launcher and fallback diagnostic path.
 
 ## Your Job
 
@@ -20,113 +14,43 @@ Your job is not to understand every metric.
 
 Your job is:
 
-1. Run `./scripts/ratchet`.
-2. Do only what it says under `DO THIS NOW`.
-3. Ignore every other command unless `DO THIS NOW` tells you to run it.
-4. If it tells you to run `./scripts/ratchet watch 2`, start it, leave the terminal open, and come back after about 2 hours.
-5. If you manually place a Braiins canary, write down the order details outside this repo and wait through the maturity window before judging it.
+1. Open the app with `./scripts/ratchet app`.
+2. Stay on `Mission Control` unless you intentionally need raw diagnostics.
+3. Read `Current Decision` first.
+4. Read `Who Is In Control` second.
+5. Use `Next Passive Action` only when it is enabled.
+6. If you manually place a Braiins canary, record it in `Manual Exposure` immediately.
+
+Do not start extra terminal watches while the app says a watch, cooldown, or manual exposure owns control.
 
 ## Who Is In Control?
 
-If `watch` is running, the Python process is in control of that terminal.
+The app has one ownership model:
 
-You do not need to babysit it. It will:
+1. `The app is ready`: you may start the enabled passive action.
+2. `A watch run owns control`: leave it alone until it finishes.
+3. `Cooldown owns control`: wait until the shown earliest action time.
+4. `Manual exposure owns control`: supervise the real-world Braiins/OCEAN position and do not start new experiments.
+5. `The app is busy`: a monitor-only backend operation is running right now.
 
-1. Collect samples every 5 minutes.
-2. Write the run report when it finishes.
-3. Print the cockpit again.
-4. Return control to your shell prompt.
+This is the anti-babysitting rule: if the app says something else owns control, your workload is zero unless you are supervising a real manual exposure.
 
-If you want the technical report, run `./scripts/ratchet report`. The normal workflow intentionally shows the cockpit first.
+## What The App Does
 
-After a watch finishes, the cockpit enters a post-watch cooldown. That is deliberate.
+The app is monitor-only. It never places, modifies, or cancels Braiins orders.
 
-Post-watch cooldown means:
+It can:
 
-1. The current experimental stage is complete.
-2. Starting another identical watch immediately is not useful ratcheting.
-3. The run report is the evidence artifact.
-4. The next planned touch is a later fresh sample, usually `./scripts/ratchet once`.
-
-During cooldown, the cockpit shows:
-
-1. A progress bar.
-2. The earliest next action time.
-3. The remaining minutes.
-
-## Controlled Automation
-
-If you do not want to babysit the cooldown manually, run:
-
-```bash
-./scripts/ratchet pipeline
-```
-
-The pipeline first prints a proposal like:
-
-```text
-I am going to: wait until this time, run one fresh sample, print the cockpit, then stop.
-Are you OK with this? Type yes or no.
-```
-
-It only runs after you type `yes`.
-
-It is still monitor-only. It never places, changes, or cancels Braiins orders.
-
-## Forever Supervisor
-
-For the full autoresearch lifecycle, run:
-
-```bash
-./scripts/ratchet supervise
-```
-
-The supervisor is the long-running engine. It:
-
-1. Loads persisted state from `data/ratchet.sqlite`.
-2. Waits through cooldown if cooldown is active.
-3. Runs the next passive watch when due.
-4. Writes reports and lifecycle events.
-5. Re-enters cooldown.
-6. Repeats until you stop it.
-
-If it crashes or the Mac reboots, start the same command again. It resumes from SQLite.
-
-Use this to inspect persisted state without starting the loop:
-
-```bash
-./scripts/ratchet supervise --status
-```
-
-## Manual Braiins Exposure
-
-If you manually start a Braiins bid, record it immediately:
-
-```bash
-./scripts/ratchet position open --description "Braiins order abc, 0.0001 BTC, 3h canary" --maturity-hours 72
-```
-
-While a manual position is active:
-
-1. The cockpit says `HOLD`.
-2. The supervisor blocks new watch experiments.
-3. Restarting the app keeps the manual exposure state.
-
-List positions:
-
-```bash
-./scripts/ratchet position list
-```
-
-When the Braiins/OCEAN exposure is truly finished:
-
-```bash
-./scripts/ratchet position close POSITION_ID
-```
+1. Read persisted lifecycle state from `data/ratchet.sqlite`.
+2. Collect OCEAN and public Braiins market samples.
+3. Run passive watch-only research windows.
+4. Write run reports under `reports/`.
+5. Track manually executed Braiins exposure that you enter yourself.
+6. Resume from the same SQLite state after a crash or reboot.
 
 ## Native Mac App
 
-The native SwiftUI shell is in:
+The native SwiftUI app is in:
 
 ```text
 macos/BraiinsRatchet
@@ -140,34 +64,23 @@ Build and open the real app bundle:
 
 This creates `macos/build/Braiins Ratchet.app`. After that, you can open that app bundle directly from Finder or pin it in the Dock.
 
-The app is a native cockpit over the same durable Python lifecycle engine.
-
-The app includes controls to record and close manual exposure, but the same rule applies: it never places Braiins orders.
-
 The app is organized as:
 
-1. `Mission Control`: one exact next action, cooldown, metrics, and direct watch-only controls.
+1. `Mission Control`: current decision, control ownership, next passive action, progress, evidence, and plain English interpretation.
 2. `Research Map`: visual autoresearch stage model.
 3. `Manual Exposure`: record or close manually executed Braiins exposure.
-4. `Reports`: raw cockpit, report, and ledger artifacts.
+4. `Advanced`: raw cockpit, report, and ledger artifacts for diagnostics.
 5. `Ratchet Lecture`: the general observe, hypothesize, bound, mature, adapt method.
 
 ## Research Pathway
 
-The cockpit has two different time horizons:
+The app has three time horizons:
 
-1. `DO THIS NOW` is the only command you should run next.
-2. `Ratchet Pathway Forecast` tells you what the next stages probably look like.
+1. `Immediate`: what can happen now, usually start, wait, refresh, or hold.
+2. `Midterm`: what probably happens after the current watch, cooldown, or manual exposure matures.
+3. `Longterm`: what could happen after multiple evidence artifacts point in the same direction.
 
-The forecast is not a profit prediction. It is a workload and research-flow prediction.
-
-It is split into:
-
-1. `Immediate`: what happens now.
-2. `Midterm`: what probably happens after the current run or sample.
-3. `Longterm`: what could happen after multiple reports mature.
-
-Expect the pathway to change after each report. That is the point of ratcheting: the next stage adapts to measured evidence instead of following a rigid plan.
+The pathway is allowed to change after each report. That is the point of ratcheting: the next stage adapts to measured evidence instead of following a rigid plan.
 
 ## What The Actions Mean
 
@@ -177,7 +90,7 @@ Expect the pathway to change after each report. That is the point of ratcheting:
 
 `manual_bid` means the stricter profit-seeking guardrails cleared. The code still does not place the order. You decide manually in Braiins.
 
-## Where The Reports Are
+## Where The Evidence Lives
 
 The master ledger is:
 
@@ -191,11 +104,23 @@ Each completed watch creates one run report:
 reports/run-*.md
 ```
 
-Older sessions can be embedded with:
+Use the app's `Advanced` tab when you need raw artifacts. Mission Control intentionally hides raw logs during normal operation.
+
+## Advanced Fallback Commands
+
+Use these only if the native app cannot be opened or you are debugging:
 
 ```bash
-./scripts/ratchet retro START_UTC END_UTC
+./scripts/ratchet
+./scripts/ratchet once
+./scripts/ratchet watch 2
+./scripts/ratchet supervise
+./scripts/ratchet position list
+./scripts/ratchet report
+./scripts/ratchet experiments
 ```
+
+The preferred workflow remains the native app.
 
 ## The Ratchet Rule
 

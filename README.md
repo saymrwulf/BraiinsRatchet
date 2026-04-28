@@ -15,27 +15,12 @@ The first implementation is deliberately conservative:
 ## Quick Start
 
 ```bash
-./scripts/ratchet setup
-./scripts/ratchet
+./scripts/ratchet app
 ```
 
-`./scripts/ratchet` is the cockpit. It tells you exactly what to do next.
+This builds and opens the native macOS control room. Use the app for normal operation; terminal commands are advanced fallback tools.
 
-If the cockpit is in cooldown and you want the app to wait until the earliest next action, run:
-
-```bash
-./scripts/ratchet pipeline
-```
-
-It prints the exact monitor-only plan and asks `yes/no` before doing anything.
-
-For the durable forever lifecycle supervisor:
-
-```bash
-./scripts/ratchet supervise
-```
-
-It persists lifecycle state in `data/ratchet.sqlite`. If the process crashes or the Mac reboots, start the same command again and it resumes from SQLite.
+The lifecycle state persists in `data/ratchet.sqlite`. If the app or Mac restarts, open the app again and it reads the same state.
 
 When you manually place a Braiins bid, record the exposure so the supervisor blocks new experiments:
 
@@ -49,7 +34,7 @@ Close it only when finished:
 ./scripts/ratchet position close POSITION_ID
 ```
 
-For the native macOS SwiftUI shell:
+For the native macOS app:
 
 ```bash
 ./scripts/ratchet app
@@ -57,9 +42,9 @@ For the native macOS SwiftUI shell:
 
 This builds `macos/build/Braiins Ratchet.app` and opens the real app bundle. Do not use `swift run` for normal operation.
 
-The app is a native visual control room: Mission Control, Research Map, Manual Exposure ledger, Reports, and a Ratchet Lecture. The design rationale is in `docs/APP_DESIGN_RESEARCH.md`.
+The app is a native visual control room: Mission Control, Research Map, Manual Exposure ledger, Advanced diagnostics, and a Ratchet Lecture. The design rationale is in `docs/APP_DESIGN_RESEARCH.md`.
 
-For a 6-hour monitoring session:
+Advanced fallback for a 6-hour CLI monitoring session:
 
 ```bash
 ./scripts/ratchet watch 6
