@@ -10,8 +10,8 @@ struct BraiinsRatchetApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AppRootView()
-                .frame(minWidth: 1180, minHeight: 780)
+            FlightDeckApp()
+                .frame(minWidth: 1240, minHeight: 820)
         }
         .windowStyle(.hiddenTitleBar)
     }
@@ -24,6 +24,7 @@ final class RatchetStore: ObservableObject {
     @Published var rawTitle = "App State"
     @Published var operation: String?
     @Published var errorMessage: String?
+    @Published var query = ""
     @Published var manualDescription = ""
     @Published var maturityHours = "72"
     @Published var closePositionId = ""
@@ -31,7 +32,7 @@ final class RatchetStore: ObservableObject {
     var isWorking: Bool { operation != nil }
 
     func refresh() async {
-        operation = "Refreshing state"
+        operation = "Refreshing"
         rawTitle = "App State"
         let result = await RatchetProcess.loadAppState()
         switch result {
@@ -125,68 +126,107 @@ final class RatchetStore: ObservableObject {
     }
 }
 
-struct AppRootView: View {
+struct FlightDeckApp: View {
     @StateObject private var store = RatchetStore()
-    @State private var selection: AppSection? = .mission
-    @State private var animate = false
+    @State private var selection: AppSection? = .deck
+    @State private var pulse = false
 
     var body: some View {
-        NavigationSplitView {
-            Sidebar(selection: $selection, store: store)
-        } detail: {
-            ZStack {
-                AppBackdrop(animate: animate)
-                Group {
-                    switch selection ?? .mission {
-                    case .mission:
-                        MissionControlView(store: store)
-                    case .stack:
-                        MiningStackView(store: store)
-                    case .ratchet:
-                        RatchetPathView(store: store)
-                    case .strategy:
-                        StrategyLabView(store: store)
-                    case .exposure:
-                        ManualExposureView(store: store)
-                    case .vault:
-                        EvidenceVaultView(store: store)
-                    }
+        root
+            .task {
+                await store.refresh()
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 4.8).repeatForever(autoreverses: true)) {
+                    pulse = true
                 }
             }
-            .toolbar {
-                ToolbarItemGroup {
-                    Button {
-                        Task { await store.refresh() }
-                    } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(store.isWorking)
+    }
 
-                    Button {
-                        Task { await store.showEngineStatus() }
-                    } label: {
-                        Label("Engine", systemImage: "dot.radiowaves.left.and.right")
-                    }
-                    .disabled(store.isWorking)
-                }
-            }
+    private var root: some View {
+        NavigationSplitView {
+            LiquidSidebar(selection: $selection, store: store)
+                .backgroundExtensionEffect()
+        } detail: {
+            detail
         }
-        .task {
-            await store.refresh()
+    }
+
+    private var detail: some View {
+        ZStack {
+            HashfieldBackdrop(pulse: pulse)
+            selectedView
+                .safeAreaPadding(.horizontal, 30)
+                .safeAreaPadding(.vertical, 24)
         }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 5).repeatForever(autoreverses: true)) {
-                animate = true
+        .toolbar { toolbarContent }
+        .searchable(text: $store.query, placement: .toolbar, prompt: "Search reports, prices, OCEAN, Braiins")
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem {
+            Button {
+                Task { await store.refresh() }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
             }
+            .buttonStyle(.glass)
+            .disabled(store.isWorking)
+        }
+
+        ToolbarItem {
+            engineToolbarButton
+        }
+    }
+
+    @ViewBuilder
+    private var engineToolbarButton: some View {
+        if store.appState?.engineStatus.running == true {
+            Button {
+                Task { await store.stopEngine() }
+            } label: {
+                Label("Stop Engine", systemImage: "stop.circle")
+            }
+            .buttonStyle(.glass)
+            .tint(.orange)
+            .disabled(store.isWorking)
+        } else {
+            Button {
+                Task { await store.startEngine() }
+            } label: {
+                Label("Start Engine", systemImage: "dot.radiowaves.left.and.right")
+            }
+            .buttonStyle(.glassProminent)
+            .tint(.green)
+            .disabled(store.isWorking)
+        }
+    }
+
+    @ViewBuilder
+    private var selectedView: some View {
+        switch selection ?? .deck {
+        case .deck:
+            FlightDeckView(store: store, pulse: pulse)
+        case .hashflow:
+            HashflowView(store: store)
+        case .ratchet:
+            RatchetMapView(store: store)
+        case .bidlab:
+            BidLabView(store: store)
+        case .exposure:
+            ExposureView(store: store)
+        case .vault:
+            EvidenceVaultView(store: store)
         }
     }
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case mission
-    case stack
+    case deck
+    case hashflow
     case ratchet
-    case strategy
+    case bidlab
     case exposure
     case vault
 
@@ -194,354 +234,422 @@ enum AppSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .mission: "Mission Control"
-        case .stack: "Mining Stack"
+        case .deck: "Flight Deck"
+        case .hashflow: "Hashflow"
         case .ratchet: "Ratchet"
-        case .strategy: "Strategy Lab"
-        case .exposure: "Manual Exposure"
-        case .vault: "Evidence Vault"
+        case .bidlab: "Bid Lab"
+        case .exposure: "Exposure"
+        case .vault: "Evidence"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .mission: "what to do, when, and why"
-        case .stack: "Umbrel, Knots, Datum, OCEAN, Braiins"
-        case .ratchet: "learning loop and future path"
-        case .strategy: "shadow bids and loss bounds"
-        case .exposure: "real manual positions"
-        case .vault: "reports and raw diagnostics"
+        case .deck: "decision and control"
+        case .hashflow: "Braiins to OCEAN"
+        case .ratchet: "autoresearch path"
+        case .bidlab: "shadow order optics"
+        case .exposure: "manual position lock"
+        case .vault: "reports and raw state"
         }
     }
 
     var symbol: String {
         switch self {
-        case .mission: "scope"
-        case .stack: "point.3.connected.trianglepath.dotted"
+        case .deck: "sparkles.rectangle.stack"
+        case .hashflow: "point.3.connected.trianglepath.dotted"
         case .ratchet: "arrow.triangle.2.circlepath"
-        case .strategy: "chart.xyaxis.line"
+        case .bidlab: "slider.horizontal.3"
         case .exposure: "lock.shield"
         case .vault: "archivebox"
         }
     }
 }
 
-struct Sidebar: View {
+struct LiquidSidebar: View {
     @Binding var selection: AppSection?
     @ObservedObject var store: RatchetStore
 
     var body: some View {
-        List(AppSection.allCases, selection: $selection) { section in
-            NavigationLink(value: section) {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(section.title)
-                            .font(.headline)
-                        Text(section.subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: section.symbol)
+        VStack(spacing: 14) {
+            HStack(spacing: 12) {
+                Image(nsImage: AppIconFactory.makeIcon(size: 42))
+                    .resizable()
+                    .frame(width: 42, height: 42)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ratchet")
+                        .font(.title3.weight(.black))
+                    Text(store.appState?.engineStatus.running == true ? "engine live" : "engine idle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(store.appState?.engineStatus.running == true ? .green : .secondary)
                 }
+                Spacer()
             }
-            .tag(section as AppSection?)
-        }
-        .navigationTitle("Ratchet")
-        .safeAreaInset(edge: .bottom) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    Image(nsImage: AppIconFactory.makeIcon(size: 38))
-                        .resizable()
-                        .frame(width: 38, height: 38)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(store.appState?.engineStatus.running == true ? "Engine running" : "Engine stopped")
-                            .font(.caption.weight(.bold))
-                        Text("monitor-only")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.top, 18)
+
+            List(AppSection.allCases, selection: $selection) { item in
+                NavigationLink(value: item) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.title)
+                                .font(.headline)
+                            Text(item.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: item.symbol)
+                            .symbolRenderingMode(.monochrome)
+                    }
+                    .padding(.vertical, 5)
+                }
+                .tag(item as AppSection?)
+            }
+            .scrollContentBackground(.hidden)
+
+            Spacer(minLength: 0)
+
+            LiquidGlassSurface(tint: store.appState?.engineStatus.running == true ? .green : .white.opacity(0.08), cornerRadius: 24) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Real-money safe", systemImage: "hand.raised.fill")
+                        .font(.headline)
+                    Text("Monitor-only. Owner-token execution is not implemented.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let operation = store.operation {
+                        ProgressView(operation)
+                            .controlSize(.small)
                     }
                 }
-                if let operation = store.operation {
-                    ProgressView(operation)
-                        .controlSize(.small)
-                }
+                .padding(14)
             }
             .padding(12)
         }
+        .navigationTitle("")
     }
 }
 
-struct MissionControlView: View {
+struct FlightDeckView: View {
     @ObservedObject var store: RatchetStore
+    let pulse: Bool
+
+    private var decision: Decision { Decision.from(store.appState, isWorking: store.isWorking) }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                MissionHero(store: store)
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    ControlOwnerCard(store: store)
-                    NextActionCard(store: store)
-                }
-
-                EvidenceStrip(appState: store.appState)
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    CenterOfAttentionCard(
-                        number: "1",
-                        title: "UX first",
-                        text: "The app must tell you what is happening without making you parse logs or babysit terminals.",
-                        symbol: "rectangle.3.group"
+        GeometryReader { proxy in
+            HStack(spacing: 26) {
+                VStack(alignment: .leading, spacing: 18) {
+                    LiquidTitleBlock(
+                        eyebrow: "Braiins Ratchet Flight Deck",
+                        title: decision.title,
+                        subtitle: decision.explanation,
+                        color: decision.color
                     )
-                    CenterOfAttentionCard(
-                        number: "2",
-                        title: "Ratchet second",
-                        text: "Every run is evidence. The system blocks fake progress and changes only one knob after maturity.",
-                        symbol: "arrow.triangle.2.circlepath"
-                    )
-                    CenterOfAttentionCard(
-                        number: "3",
-                        title: "Mining stack third",
-                        text: "Braiins price, OCEAN luck/window, Datum routing, Knots validation, and Umbrel operations are one system.",
-                        symbol: "cpu"
-                    )
-                }
-            }
-            .padding(28)
-        }
-    }
-}
 
-struct MissionHero: View {
-    @ObservedObject var store: RatchetStore
-
-    private var decision: Decision {
-        Decision.from(store.appState, isWorking: store.isWorking)
-    }
-
-    var body: some View {
-        HeroSurface {
-            HStack(alignment: .top, spacing: 24) {
-                VStack(alignment: .leading, spacing: 22) {
-                    HStack(spacing: 14) {
-                        Image(nsImage: AppIconFactory.makeIcon(size: 58))
-                            .resizable()
-                            .frame(width: 58, height: 58)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Braiins Ratchet")
-                                .font(.system(size: 42, weight: .black, design: .rounded))
-                            Text("Native autoresearch cockpit for buying hashpower smarter")
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
+                    GlassEffectContainer(spacing: 14) {
+                        HStack(spacing: 14) {
+                            DecisionPuck(title: "control", value: controlOwner.title, detail: controlOwner.detail, symbol: controlOwner.symbol, tint: decision.color)
+                            DecisionPuck(title: "next", value: nextTitle, detail: nextDetail, symbol: "arrow.forward.circle", tint: .cyan)
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Current Decision")
-                            .font(.caption.weight(.heavy))
-                            .textCase(.uppercase)
-                            .foregroundStyle(.secondary)
-                        Text(decision.title)
-                            .font(.system(size: 56, weight: .black, design: .rounded))
-                            .foregroundStyle(decision.color)
-                        Text(decision.explanation)
-                            .font(.title3.weight(.semibold))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    InstrumentRibbon(appState: store.appState)
 
-                    SafetyRow()
+                    EngineConsole(store: store)
                 }
+                .frame(width: max(430, proxy.size.width * 0.38))
 
-                Spacer(minLength: 20)
-
-                VStack(spacing: 16) {
-                    PhaseOrb(phase: ResearchPhase.from(store.appState), running: store.appState?.engineStatus.running == true)
-                        .frame(width: 230, height: 230)
-
-                    if let watch = store.appState?.operatorState.completedWatch {
-                        CooldownRing(watch: watch)
-                    } else {
-                        EngineBadge(status: store.appState?.engineStatus)
-                    }
-                }
-                .frame(width: 280)
+                ReactorLens(appState: store.appState, decision: decision, pulse: pulse)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }
-}
 
-struct ControlOwnerCard: View {
-    @ObservedObject var store: RatchetStore
-
-    private var owner: ControlOwner {
+    private var controlOwner: ControlOwner {
         ControlOwner.from(store.appState, isWorking: store.isWorking)
-    }
-
-    var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 14) {
-                Label("Who Owns Control", systemImage: owner.symbol)
-                    .font(.headline)
-                Text(owner.title)
-                    .font(.system(size: 30, weight: .black, design: .rounded))
-                Text(owner.detail)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-}
-
-struct NextActionCard: View {
-    @ObservedObject var store: RatchetStore
-
-    var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 14) {
-                Label("Next Useful Action", systemImage: "arrow.forward.circle")
-                    .font(.headline)
-                Text(nextTitle)
-                    .font(.system(size: 30, weight: .black, design: .rounded))
-                Text(nextDetail)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 10) {
-                    if store.appState?.engineStatus.running == true {
-                        Button("Stop Forever Engine") {
-                            Task { await store.stopEngine() }
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(store.isWorking)
-                    } else {
-                        Button("Start Forever Engine") {
-                            Task { await store.startEngine() }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(engineStartBlocked || store.isWorking)
-                    }
-
-                    Button(passiveButtonTitle) {
-                        Task { await runPassiveAction() }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!canRunPassive || store.isWorking)
-                }
-            }
-        }
     }
 
     private var nextTitle: String {
         guard let state = store.appState else { return "Load state" }
-        if state.engineStatus.running { return "Let the engine work" }
-        if state.operatorState.completedWatch != nil { return "Wait for cooldown" }
+        if state.engineStatus.running { return "Engine owns it" }
         if state.operatorState.activeWatch != nil { return "Wait for watch" }
+        if let watch = state.operatorState.completedWatch { return "Wait \(watch.remainingMinutes)m" }
         if !state.operatorState.activeManualPositions.isEmpty { return "Hold exposure" }
         return state.automationPlan.title
     }
 
     private var nextDetail: String {
-        guard let state = store.appState else { return "The app is reading SQLite and latest reports." }
-        if state.engineStatus.running {
-            return "The forever monitor engine will wait, sample, watch, write evidence, and re-enter cooldown without terminal babysitting."
-        }
-        if let watch = state.operatorState.completedWatch {
-            return "Earliest next action: \(watch.earliestActionLocal). Starting another identical watch before then is loop-chasing."
-        }
-        if !state.operatorState.activeManualPositions.isEmpty {
-            return "A real-world Braiins/OCEAN position is active. New experiments stay blocked until you close it."
-        }
+        guard let state = store.appState else { return "Reading durable SQLite state." }
+        if state.engineStatus.running { return "No babysitting. The background engine waits, samples, watches, and writes evidence." }
+        if let watch = state.operatorState.completedWatch { return "Earliest useful action: \(watch.earliestActionLocal)." }
         return state.automationPlan.steps.first ?? "No passive action is useful right now."
     }
+}
 
-    private var engineStartBlocked: Bool {
-        guard let state = store.appState else { return false }
-        return state.operatorState.activeWatch != nil || !state.operatorState.activeManualPositions.isEmpty
-    }
+struct LiquidTitleBlock: View {
+    let eyebrow: String
+    let title: String
+    let subtitle: String
+    let color: Color
 
-    private var canRunPassive: Bool {
-        guard let plan = store.appState?.automationPlan else { return false }
-        switch plan.kind {
-        case "once_now", "watch_2h", "report_only":
-            return true
-        case "wait_then_once":
-            return plan.waitSeconds <= 0
-        default:
-            return false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(eyebrow)
+                .font(.caption.weight(.heavy))
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+                .tracking(1.6)
+            Text(title)
+                .font(.system(size: 78, weight: .black, design: .rounded))
+                .foregroundStyle(
+                    LinearGradient(colors: [color, .white.opacity(0.92)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .shadow(color: color.opacity(0.45), radius: 24, x: 0, y: 12)
+            Text(subtitle)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
+}
 
-    private var passiveButtonTitle: String {
-        guard let plan = store.appState?.automationPlan else { return "Refresh" }
-        switch plan.kind {
-        case "once_now": return "One Fresh Sample"
-        case "watch_2h": return "One Watch"
-        case "wait_then_once": return plan.waitSeconds > 0 ? "Cooling Down" : "One Fresh Sample"
-        case "report_only": return "Open Report"
-        default: return "No Passive Step"
-        }
-    }
+struct DecisionPuck: View {
+    let title: String
+    let value: String
+    let detail: String
+    let symbol: String
+    let tint: Color
 
-    private func runPassiveAction() async {
-        guard let plan = store.appState?.automationPlan else {
-            await store.refresh()
-            return
-        }
-        switch plan.kind {
-        case "once_now":
-            await store.runOneFreshSample()
-        case "watch_2h":
-            await store.runOnePassiveWatch()
-        case "wait_then_once" where plan.waitSeconds <= 0:
-            await store.runOneFreshSample()
-        case "report_only":
-            await store.showReport()
-        default:
-            await store.refresh()
+    var body: some View {
+        LiquidGlassSurface(tint: tint.opacity(0.22), cornerRadius: 30) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label(title, systemImage: symbol)
+                        .font(.caption.weight(.heavy))
+                        .textCase(.uppercase)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                Text(value)
+                    .font(.title.weight(.black))
+                    .lineLimit(2)
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(4)
+            }
+            .padding(18)
         }
     }
 }
 
-struct EvidenceStrip: View {
+struct EngineConsole: View {
+    @ObservedObject var store: RatchetStore
+
+    var body: some View {
+        LiquidGlassSurface(tint: store.appState?.engineStatus.running == true ? .green.opacity(0.28) : .blue.opacity(0.14), cornerRadius: 36) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Forever Engine")
+                            .font(.title2.weight(.black))
+                        Text(store.appState?.engineStatus.detail ?? "Loading engine state")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    EngineBeacon(running: store.appState?.engineStatus.running == true)
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        Task { await store.startEngine() }
+                    } label: {
+                        Label("Start Forever Engine", systemImage: "dot.radiowaves.left.and.right")
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(.green)
+                    .disabled(store.appState?.engineStatus.running == true || store.isWorking)
+
+                    Button {
+                        Task { await store.stopEngine() }
+                    } label: {
+                        Label("Stop", systemImage: "stop.circle")
+                    }
+                    .buttonStyle(.glass)
+                    .tint(.orange)
+                    .disabled(store.appState?.engineStatus.running != true || store.isWorking)
+
+                    Button {
+                        Task { await store.runOneFreshSample() }
+                    } label: {
+                        Label("One Sample", systemImage: "camera.metering.center.weighted")
+                    }
+                    .buttonStyle(.glass)
+                    .disabled(store.isWorking)
+                }
+            }
+            .padding(20)
+        }
+    }
+}
+
+struct ReactorLens: View {
+    let appState: AppStatePayload?
+    let decision: Decision
+    let pulse: Bool
+
+    var body: some View {
+        ZStack {
+            LensRings(color: decision.color, pulse: pulse)
+
+            HashflowPath()
+                .padding(70)
+
+            VStack(spacing: 12) {
+                Text(decision.title)
+                    .font(.system(size: 40, weight: .black, design: .rounded))
+                    .foregroundStyle(decision.color)
+                Text(centerMetric)
+                    .font(.system(size: 24, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.primary)
+                Text("expected net")
+                    .font(.caption.weight(.heavy))
+                    .textCase(.uppercase)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(28)
+            .glassEffect(.regular.tint(decision.color.opacity(0.25)).interactive(), in: Circle())
+        }
+        .frame(minHeight: 620)
+        .accessibilityLabel("Mining reactor lens, current decision \(decision.title)")
+    }
+
+    private var centerMetric: String {
+        sats(appState?.latest.proposal?["expected_net_btc"]?.description ?? "n/a")
+    }
+}
+
+struct LensRings: View {
+    let color: Color
+    let pulse: Bool
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<6) { index in
+                Circle()
+                    .stroke(
+                        AngularGradient(
+                            colors: [
+                                color.opacity(0.04),
+                                .cyan.opacity(0.45),
+                                .green.opacity(0.60),
+                                .orange.opacity(0.42),
+                                color.opacity(0.04)
+                            ],
+                            center: .center
+                        ),
+                        lineWidth: CGFloat(max(2, 14 - index * 2))
+                    )
+                    .frame(width: CGFloat(230 + index * 76), height: CGFloat(230 + index * 76))
+                    .rotationEffect(.degrees(pulse ? Double(index * 16 + 38) : Double(-index * 12)))
+                    .opacity(0.86 - Double(index) * 0.09)
+            }
+
+            Circle()
+                .fill(RadialGradient(colors: [color.opacity(0.20), .clear], center: .center, startRadius: 30, endRadius: 360))
+                .blur(radius: 8)
+        }
+    }
+}
+
+struct HashflowPath: View {
+    private let nodes = [
+        FlowNode("Braiins", "bid market", .green, CGPoint(x: 0.15, y: 0.30), "bitcoinsign.circle"),
+        FlowNode("Hashers", "sub workers", .cyan, CGPoint(x: 0.35, y: 0.62), "bolt.horizontal"),
+        FlowNode("OCEAN", "pool window", .blue, CGPoint(x: 0.62, y: 0.35), "water.waves"),
+        FlowNode("Blocks", "luck", .orange, CGPoint(x: 0.82, y: 0.58), "cube.transparent")
+    ]
+
+    var body: some View {
+        GeometryReader { proxy in
+            Canvas { context, size in
+                var path = Path()
+                let points = nodes.map { CGPoint(x: $0.position.x * size.width, y: $0.position.y * size.height) }
+                guard let first = points.first else { return }
+                path.move(to: first)
+                for index in 1..<points.count {
+                    let previous = points[index - 1]
+                    let current = points[index]
+                    let c1 = CGPoint(x: previous.x + 120, y: previous.y - 60)
+                    let c2 = CGPoint(x: current.x - 120, y: current.y + 60)
+                    path.addCurve(to: current, control1: c1, control2: c2)
+                }
+                context.stroke(path, with: .linearGradient(
+                    Gradient(colors: [.green.opacity(0.85), .cyan.opacity(0.85), .orange.opacity(0.85)]),
+                    startPoint: CGPoint(x: 0, y: 0),
+                    endPoint: CGPoint(x: size.width, y: size.height)
+                ), style: StrokeStyle(lineWidth: 5, lineCap: .round, dash: [14, 10]))
+            }
+
+            ForEach(nodes) { node in
+                FlowNodeView(node: node)
+                    .position(x: node.position.x * proxy.size.width, y: node.position.y * proxy.size.height)
+            }
+        }
+    }
+}
+
+struct FlowNode: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let color: Color
+    let position: CGPoint
+    let symbol: String
+
+    init(_ title: String, _ subtitle: String, _ color: Color, _ position: CGPoint, _ symbol: String) {
+        self.title = title
+        self.subtitle = subtitle
+        self.color = color
+        self.position = position
+        self.symbol = symbol
+    }
+}
+
+struct FlowNodeView: View {
+    let node: FlowNode
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: node.symbol)
+                .font(.title2.weight(.bold))
+            Text(node.title)
+                .font(.headline)
+            Text(node.subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(width: 112, height: 92)
+        .glassEffect(.regular.tint(node.color.opacity(0.26)).interactive(), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+}
+
+struct InstrumentRibbon: View {
     let appState: AppStatePayload?
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 14) {
-            MetricCard(
-                title: "Braiins Fill Price",
-                value: market("fillable_price_btc_per_eh_day", fallback: market("best_ask_btc_per_eh_day")),
-                detail: "best ask \(market("best_ask_btc_per_eh_day"))",
-                symbol: "bitcoinsign.circle"
-            )
-            MetricCard(
-                title: "OCEAN Pool",
-                value: "\(ocean("pool_hashrate_eh_s")) EH/s",
-                detail: "difficulty \(ocean("network_difficulty_t")) T",
-                symbol: "water.waves"
-            )
-            MetricCard(
-                title: "Model Net",
-                value: sats(proposal("expected_net_btc")),
-                detail: "BTC \(proposal("expected_net_btc"))",
-                symbol: "plus.forwardslash.minus"
-            )
-            MetricCard(
-                title: "Evidence",
-                value: appState?.operatorState.latestReport?.lastPathComponent ?? "none",
-                detail: freshnessText,
-                symbol: "doc.text.magnifyingglass"
-            )
+        GlassEffectContainer(spacing: 12) {
+            HStack(spacing: 12) {
+                InstrumentChip("Braiins", market("fillable_price_btc_per_eh_day", fallback: market("best_ask_btc_per_eh_day")), "BTC/EH/day", "chart.line.uptrend.xyaxis", .green)
+                InstrumentChip("OCEAN", "\(ocean("pool_hashrate_eh_s"))", "EH/s pool", "water.waves", .cyan)
+                InstrumentChip("Window", ocean("avg_block_time_hours"), "h/block avg", "hourglass", .orange)
+                InstrumentChip("Net", sats(proposal("expected_net_btc")), "model EV", "plus.forwardslash.minus", .pink)
+            }
         }
-    }
-
-    private var freshnessText: String {
-        guard let minutes = appState?.operatorState.freshnessMinutes else { return "no sample age" }
-        return minutes <= 30 ? "fresh, \(minutes)m old" : "stale, \(minutes)m old"
     }
 
     private func market(_ key: String, fallback: String = "n/a") -> String {
@@ -557,495 +665,270 @@ struct EvidenceStrip: View {
     }
 }
 
-struct CenterOfAttentionCard: View {
-    let number: String
+struct InstrumentChip: View {
     let title: String
-    let text: String
+    let value: String
+    let unit: String
     let symbol: String
+    let color: Color
+
+    init(_ title: String, _ value: String, _ unit: String, _ symbol: String, _ color: Color) {
+        self.title = title
+        self.value = value
+        self.unit = unit
+        self.symbol = symbol
+        self.color = color
+    }
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(number)
-                        .font(.title.weight(.black))
-                        .foregroundStyle(.white)
-                        .frame(width: 46, height: 46)
-                        .background(.green.gradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    Spacer()
-                    Image(systemName: symbol)
-                        .font(.title2)
-                        .foregroundStyle(.green)
-                }
-                Text(title)
-                    .font(.title2.weight(.black))
-                Text(text)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: symbol)
+                .font(.caption.weight(.heavy))
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.title3.monospacedDigit().weight(.black))
+                .lineLimit(1)
+            Text(unit)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular.tint(color.opacity(0.18)).interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 }
 
-struct MiningStackView: View {
+struct HashflowView: View {
     @ObservedObject var store: RatchetStore
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                PageHeader(
-                    title: "Mining Stack",
-                    subtitle: "The system you are actually operating: your Umbrel validates and routes; Braiins supplies temporary hashers; OCEAN turns pooled work into stochastic rewards."
-                )
-
-                Card {
-                    VStack(alignment: .leading, spacing: 18) {
-                        Label("Two Hashpower Sources, One Reward Funnel", systemImage: "arrow.down.forward.and.arrow.up.backward")
-                            .font(.headline)
-                        HStack(alignment: .top, spacing: 16) {
-                            StackLane(
-                                title: "Your sovereign miner path",
-                                accent: .cyan,
-                                nodes: [
-                                    StackNode("Umbrel", "local operator shell", "house"),
-                                    StackNode("Knots", "validates Bitcoin rules", "checkmark.seal"),
-                                    StackNode("Datum", "job routing / template work", "point.3.connected.trianglepath.dotted"),
-                                    StackNode("OCEAN", "pool payout window", "water.waves")
-                                ]
-                            )
-                            StackLane(
-                                title: "Bought hashpower path",
-                                accent: .green,
-                                nodes: [
-                                    StackNode("Braiins", "hashmarket order book", "chart.line.uptrend.xyaxis"),
-                                    StackNode("Sub hashers", "temporary workers", "bolt.horizontal"),
-                                    StackNode("OCEAN", "same reward funnel", "water.waves"),
-                                    StackNode("Blocks", "luck dominates short windows", "cube")
-                                ]
-                            )
-                        }
+                SectionHeader("Hashflow", "The real system: Braiins buys temporary workers; your Umbrel/Knots/Datum path routes sovereign mining; OCEAN decides payout variance.")
+                LiquidGlassSurface(tint: .cyan.opacity(0.14), cornerRadius: 40) {
+                    HStack(spacing: 24) {
+                        FlowLane(title: "Your node path", tint: .cyan, steps: [
+                            ("Umbrel", "operator host", "house"),
+                            ("Knots", "validates rules", "checkmark.seal"),
+                            ("Datum", "template/routing", "point.3.connected.trianglepath.dotted"),
+                            ("OCEAN", "share window", "water.waves")
+                        ])
+                        FlowLane(title: "Bought hashpower path", tint: .green, steps: [
+                            ("Braiins", "spot hashmarket", "bitcoinsign.circle"),
+                            ("Hashers", "temporary workers", "bolt.horizontal"),
+                            ("OCEAN", "same pool", "water.waves"),
+                            ("Blocks", "stochastic payout", "cube.transparent")
+                        ])
                     }
+                    .padding(24)
                 }
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    InterplayCard(
-                        title: "Braiins pressure",
-                        symbol: "cart",
-                        text: "Your controllable variable is bid shape: price, size, duration, timing, and target depth. The app currently models a shadow order before any manual spend.",
-                        facts: [
-                            "fillable price: \(market("fillable_price_btc_per_eh_day")) BTC/EH/day",
-                            "available: \(market("available_hashrate_eh_s")) EH/s",
-                            "target depth: \(market("fillable_target_ph")) PH/s"
-                        ]
-                    )
-                    InterplayCard(
-                        title: "OCEAN variance",
-                        symbol: "dice",
-                        text: "Your bought hashpower only matters if OCEAN block discovery and the payout window cooperate. Short canaries can be scientifically useful and still lose.",
-                        facts: [
-                            "pool: \(ocean("pool_hashrate_eh_s")) EH/s",
-                            "share window: \(ocean("share_log_window_t")) T",
-                            "avg block time: \(ocean("avg_block_time_hours")) h"
-                        ]
-                    )
-                    InterplayCard(
-                        title: "Local sovereignty",
-                        symbol: "lock.shield",
-                        text: "Umbrel, Knots, and Datum are treated as infrastructure context, not something this app mutates. This app reads and reasons; it does not reconfigure your node.",
-                        facts: [
-                            "computer safety: repo-local writes",
-                            "Braiins orders: manual only",
-                            "watch token: optional read-only later"
-                        ]
-                    )
-                    InterplayCard(
-                        title: "Objective",
-                        symbol: "target",
-                        text: "The objective is not a money-printer oracle. The objective is to discover bid regimes that minimize expected loss or expose rare profitable windows.",
-                        facts: [
-                            "capital: \(config("capital", "available_btc")) BTC",
-                            "canary budget: \(config("guardrails", "max_canary_expected_loss_btc")) BTC",
-                            "spend cap: \(config("guardrails", "max_manual_order_btc")) BTC"
-                        ]
-                    )
-                }
+                InstrumentRibbon(appState: store.appState)
             }
-            .padding(28)
         }
     }
-
-    private func market(_ key: String) -> String {
-        store.appState?.latest.market?[key]?.description ?? "n/a"
-    }
-
-    private func ocean(_ key: String) -> String {
-        store.appState?.latest.ocean?[key]?.description ?? "n/a"
-    }
-
-    private func config(_ section: String, _ key: String) -> String {
-        store.appState?.config.value(section, key) ?? "n/a"
-    }
 }
 
-struct StackNode: Identifiable {
-    let id = UUID()
+struct FlowLane: View {
     let title: String
-    let subtitle: String
-    let symbol: String
-
-    init(_ title: String, _ subtitle: String, _ symbol: String) {
-        self.title = title
-        self.subtitle = subtitle
-        self.symbol = symbol
-    }
-}
-
-struct StackLane: View {
-    let title: String
-    let accent: Color
-    let nodes: [StackNode]
+    let tint: Color
+    let steps: [(String, String, String)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
-                .font(.headline)
-            ForEach(Array(nodes.enumerated()), id: \.element.id) { index, node in
-                HStack(spacing: 12) {
-                    Image(systemName: node.symbol)
-                        .font(.title3)
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(accent.gradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(node.title)
+                .font(.title2.weight(.black))
+            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                HStack(spacing: 14) {
+                    Image(systemName: step.2)
+                        .font(.title3.weight(.bold))
+                        .frame(width: 42, height: 42)
+                        .glassEffect(.regular.tint(tint.opacity(0.25)), in: Circle())
+                    VStack(alignment: .leading) {
+                        Text(step.0)
                             .font(.headline)
-                        Text(node.subtitle)
+                        Text(step.1)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if index < nodes.count - 1 {
+                    if index < steps.count - 1 {
                         Image(systemName: "arrow.down")
                             .foregroundStyle(.secondary)
                     }
                 }
                 .padding(12)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(.black.opacity(0.12), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
 
-struct InterplayCard: View {
-    let title: String
-    let symbol: String
-    let text: String
-    let facts: [String]
-
-    var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 14) {
-                Label(title, systemImage: symbol)
-                    .font(.title3.weight(.bold))
-                Text(text)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(facts, id: \.self) { fact in
-                        Label(fact, systemImage: "smallcircle.filled.circle")
-                            .font(.caption.weight(.semibold))
-                    }
-                }
-                .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-struct RatchetPathView: View {
+struct RatchetMapView: View {
     @ObservedObject var store: RatchetStore
+
+    private let stages = [
+        ("Sense", "collect live OCEAN and Braiins data", "antenna.radiowaves.left.and.right"),
+        ("Price", "model executable depth", "chart.line.uptrend.xyaxis"),
+        ("Watch", "measure without spending", "binoculars"),
+        ("Mature", "respect pool variance", "hourglass"),
+        ("Adapt", "change one knob", "slider.horizontal.3")
+    ]
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                PageHeader(
-                    title: "Autoresearch Ratchet",
-                    subtitle: "Karpathy-style progress means one measured step forward, never a vague loop. The app should make the research path lecture-grade."
-                )
-
-                Card {
-                    VStack(alignment: .leading, spacing: 18) {
-                        Label("Current Learning Loop", systemImage: "arrow.triangle.2.circlepath")
-                            .font(.headline)
-                        RatchetStepper(phase: ResearchPhase.from(store.appState))
-                        Text(phaseExplanation)
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    PathForecastCard(
-                        title: "Immediate",
-                        probability: "highest confidence",
-                        text: immediateForecast,
-                        symbol: "1.circle"
-                    )
-                    PathForecastCard(
-                        title: "Midterm",
-                        probability: "likely to change",
-                        text: midtermForecast,
-                        symbol: "2.circle"
-                    )
-                    PathForecastCard(
-                        title: "Longterm",
-                        probability: "conditional",
-                        text: longtermForecast,
-                        symbol: "3.circle"
-                    )
-                }
-
-                Card {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label("One-Knob Law", systemImage: "slider.horizontal.3")
-                            .font(.headline)
-                        Text("A ratchet fails when multiple variables change at once. Strategy adaptation is only allowed when mature evidence repeats a pattern.")
-                            .font(.title3.weight(.semibold))
-                        HStack {
-                            KnobPill("depth target")
-                            KnobPill("overpay cushion")
-                            KnobPill("canary spend")
-                            KnobPill("duration")
-                            KnobPill("timing window")
+            VStack(alignment: .leading, spacing: 24) {
+                SectionHeader("Ratchet", "The learning wheel is the product. It prevents loop-chasing and forces every bid idea to earn its next step.")
+                LiquidGlassSurface(tint: .green.opacity(0.14), cornerRadius: 44) {
+                    HStack(spacing: 0) {
+                        ForEach(Array(stages.enumerated()), id: \.offset) { index, stage in
+                            RatchetStage(index: index, active: index == ResearchPhase.from(store.appState).index, done: index < ResearchPhase.from(store.appState).index, title: stage.0, text: stage.1, symbol: stage.2)
+                            if index < stages.count - 1 {
+                                Rectangle()
+                                    .fill(index < ResearchPhase.from(store.appState).index ? .green.opacity(0.7) : .white.opacity(0.14))
+                                    .frame(height: 4)
+                            }
                         }
                     }
+                    .padding(24)
+                }
+                HStack(spacing: 16) {
+                    ForecastCapsule("Immediate", immediateForecast, .green)
+                    ForecastCapsule("Midterm", "Compare the next fresh state against the last evidence artifact.", .cyan)
+                    ForecastCapsule("Longterm", "Only repeated mature reports can justify changing one bid knob.", .orange)
                 }
             }
-            .padding(28)
-        }
-    }
-
-    private var phaseExplanation: String {
-        switch ResearchPhase.from(store.appState) {
-        case .loading: return "The app is loading the durable state before choosing a research stage."
-        case .refresh: return "The market sample is stale or missing. One fresh sample is useful; a new watch is not yet justified."
-        case .watch: return "A bounded watch is the active measurement. It buys information without spending BTC."
-        case .cooldown: return "The previous watch is evidence. Cooldown prevents repeating the same experiment and pretending it was progress."
-        case .manual: return "A manual Braiins exposure is active. The ratchet holds until that real-world position is closed."
-        case .adapt: return "Evidence exists and the system can consider one controlled knob change later."
         }
     }
 
     private var immediateForecast: String {
         if let watch = store.appState?.operatorState.completedWatch {
-            return "Wait until \(watch.earliestActionLocal). Workload: zero unless you are reviewing the report."
+            return "Wait \(watch.remainingMinutes)m. Earliest action \(watch.earliestActionLocal)."
         }
-        if store.appState?.engineStatus.running == true {
-            return "Let the forever monitor engine own passive sampling."
-        }
+        if store.appState?.engineStatus.running == true { return "Engine owns passive observation." }
         return store.appState?.automationPlan.steps.first ?? "Load state."
     }
-
-    private var midtermForecast: String {
-        if store.appState?.operatorState.completedWatch != nil {
-            return "After cooldown, one fresh sample compares current Braiins/OCEAN state against the last report."
-        }
-        return "The next report becomes the evidence artifact; it does not decide profit alone."
-    }
-
-    private var longtermForecast: String {
-        "Only repeated mature evidence can justify changing one bid knob or considering a tiny manual canary."
-    }
 }
 
-struct RatchetStepper: View {
-    let phase: ResearchPhase
-    private let stages: [ResearchStage] = [
-        ResearchStage("Sense", "collect", "antenna.radiowaves.left.and.right"),
-        ResearchStage("Price", "shadow market", "chart.line.uptrend.xyaxis"),
-        ResearchStage("Watch", "measure", "binoculars"),
-        ResearchStage("Mature", "wait", "hourglass"),
-        ResearchStage("Adapt", "one knob", "slider.horizontal.3")
-    ]
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(stages.enumerated()), id: \.element.id) { index, stage in
-                StageBubble(stage: stage, state: state(for: index))
-                if index < stages.count - 1 {
-                    Rectangle()
-                        .fill(index < phase.index ? Color.green.opacity(0.75) : Color.secondary.opacity(0.22))
-                        .frame(height: 4)
-                }
-            }
-        }
-    }
-
-    private func state(for index: Int) -> StageBubble.StateKind {
-        if index < phase.index { return .done }
-        if index == phase.index { return .active }
-        return .future
-    }
-}
-
-struct ResearchStage: Identifiable {
-    let id = UUID()
+struct RatchetStage: View {
+    let index: Int
+    let active: Bool
+    let done: Bool
     let title: String
-    let subtitle: String
+    let text: String
     let symbol: String
 
-    init(_ title: String, _ subtitle: String, _ symbol: String) {
-        self.title = title
-        self.subtitle = subtitle
-        self.symbol = symbol
-    }
-}
-
-struct StageBubble: View {
-    enum StateKind {
-        case done
-        case active
-        case future
-    }
-
-    let stage: ResearchStage
-    let state: StateKind
-
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: stage.symbol)
+        VStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.title2.weight(.bold))
+                .frame(width: 62, height: 62)
+                .glassEffect(.regular.tint(tint.opacity(0.35)).interactive(), in: Circle())
+            Text(title)
                 .font(.headline)
-                .foregroundStyle(.white)
-                .frame(width: 50, height: 50)
-                .background(fill, in: Circle())
-            Text(stage.title)
-                .font(.caption.weight(.bold))
-            Text(stage.subtitle)
-                .font(.caption2)
+            Text(text)
+                .font(.caption)
+                .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
         }
-        .frame(width: 112)
+        .frame(width: 142)
+        .scaleEffect(active ? 1.08 : 1)
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: active)
     }
 
-    private var fill: AnyShapeStyle {
-        switch state {
-        case .done: AnyShapeStyle(Color.green.gradient)
-        case .active: AnyShapeStyle(Color.orange.gradient)
-        case .future: AnyShapeStyle(Color.secondary.opacity(0.25))
-        }
+    private var tint: Color {
+        active ? .orange : (done ? .green : .white.opacity(0.18))
     }
 }
 
-struct PathForecastCard: View {
+struct ForecastCapsule: View {
     let title: String
-    let probability: String
     let text: String
-    let symbol: String
+    let color: Color
+
+    init(_ title: String, _ text: String, _ color: Color) {
+        self.title = title
+        self.text = text
+        self.color = color
+    }
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                Label(title, systemImage: symbol)
-                    .font(.title3.weight(.bold))
-                Text(probability)
-                    .font(.caption.weight(.heavy))
-                    .textCase(.uppercase)
-                    .foregroundStyle(.green)
+        LiquidGlassSurface(tint: color.opacity(0.16), cornerRadius: 30) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(.title3.weight(.black))
                 Text(text)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(18)
         }
     }
 }
 
-struct KnobPill: View {
-    let text: String
-
-    init(_ text: String) {
-        self.text = text
-    }
-
-    var body: some View {
-        Text(text)
-            .font(.caption.weight(.bold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.regularMaterial, in: Capsule())
-    }
-}
-
-struct StrategyLabView: View {
+struct BidLabView: View {
     @ObservedObject var store: RatchetStore
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                PageHeader(
-                    title: "Strategy Lab",
-                    subtitle: "This is the shadow bid desk. It explains what the model would study, not an owner-token execution surface."
-                )
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    ShadowOrderCard(appState: store.appState)
-                    RiskBoundaryCard(appState: store.appState)
+                SectionHeader("Bid Lab", "A shadow order desk. It can tell you what it would study; it cannot spend BTC.")
+                HStack(alignment: .top, spacing: 18) {
+                    ShadowTicket(appState: store.appState)
+                    LossLens(appState: store.appState)
                 }
-
-                Card {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label("Why This Is Hard", systemImage: "exclamationmark.triangle")
-                            .font(.headline)
-                        Text("A good Braiins price can still lose if OCEAN does not find blocks inside the payout window. A bad-looking expected value can still be useful if it maps price behavior under bounded downside. The app separates learning value from profit claims.")
+                LiquidGlassSurface(tint: .orange.opacity(0.12), cornerRadius: 36) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Hard truth", systemImage: "exclamationmark.triangle")
+                            .font(.title2.weight(.black))
+                        Text(store.appState?.latest.proposal?["reason"]?.description ?? "No proposal loaded.")
                             .font(.title3.weight(.semibold))
                             .fixedSize(horizontal: false, vertical: true)
-                        Text(store.appState?.latest.proposal?["reason"]?.description ?? "No proposal loaded.")
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    .padding(22)
                 }
             }
-            .padding(28)
         }
     }
 }
 
-struct ShadowOrderCard: View {
+struct ShadowTicket: View {
     let appState: AppStatePayload?
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 14) {
-                Label("Shadow Order", systemImage: "doc.text.magnifyingglass")
-                    .font(.headline)
+        LiquidGlassSurface(tint: actionColor.opacity(0.22), cornerRadius: 38) {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Shadow ticket", systemImage: "ticket")
+                    .font(.title2.weight(.black))
                 Text(actionTitle)
-                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .font(.system(size: 42, weight: .black, design: .rounded))
                     .foregroundStyle(actionColor)
-                VStack(spacing: 8) {
-                    StrategyRow("price", proposal("order_price_btc_per_eh_day"), "BTC/EH/day")
-                    StrategyRow("spend", proposal("order_spend_btc"), "BTC")
-                    StrategyRow("duration", proposal("order_duration_minutes"), "minutes")
-                    StrategyRow("implied speed", phText(proposal("order_implied_hashrate_eh_s")), "PH/s")
-                }
+                ValueGrid(rows: [
+                    ("price", proposal("order_price_btc_per_eh_day"), "BTC/EH/day"),
+                    ("spend", proposal("order_spend_btc"), "BTC"),
+                    ("duration", proposal("order_duration_minutes"), "min"),
+                    ("speed", phText(proposal("order_implied_hashrate_eh_s")), "PH/s")
+                ])
             }
+            .padding(24)
         }
     }
 
     private var actionTitle: String {
         switch proposal("action") {
-        case "manual_bid": return "Manual bid review"
-        case "manual_canary": return "Learning canary"
-        case "observe": return "Observe only"
-        default: return "No proposal"
+        case "manual_bid": "manual review"
+        case "manual_canary": "learning canary"
+        case "observe": "observe"
+        default: "no proposal"
         }
     }
 
     private var actionColor: Color {
         switch proposal("action") {
-        case "manual_bid": return .green
-        case "manual_canary": return .orange
-        default: return .secondary
+        case "manual_bid": .green
+        case "manual_canary": .orange
+        default: .secondary
         }
     }
 
@@ -1054,30 +937,30 @@ struct ShadowOrderCard: View {
     }
 }
 
-struct RiskBoundaryCard: View {
+struct LossLens: View {
     let appState: AppStatePayload?
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 14) {
-                Label("Loss Boundary", systemImage: "shield.lefthalf.filled")
-                    .font(.headline)
+        LiquidGlassSurface(tint: netColor.opacity(0.20), cornerRadius: 38) {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Loss lens", systemImage: "shield.lefthalf.filled")
+                    .font(.title2.weight(.black))
                 Text(sats(proposal("expected_net_btc")))
-                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .font(.system(size: 42, weight: .black, design: .rounded))
                     .foregroundStyle(netColor)
-                VStack(spacing: 8) {
-                    StrategyRow("expected reward", proposal("expected_reward_btc"), "BTC")
-                    StrategyRow("expected net", proposal("expected_net_btc"), "BTC")
-                    StrategyRow("breakeven", proposal("breakeven_btc_per_eh_day"), "BTC/EH/day")
-                    StrategyRow("canary budget", config("guardrails", "max_canary_expected_loss_btc"), "BTC")
-                }
+                ValueGrid(rows: [
+                    ("reward", proposal("expected_reward_btc"), "BTC"),
+                    ("net", proposal("expected_net_btc"), "BTC"),
+                    ("breakeven", proposal("breakeven_btc_per_eh_day"), "BTC/EH/day"),
+                    ("budget", config("guardrails", "max_canary_expected_loss_btc"), "BTC")
+                ])
             }
+            .padding(24)
         }
     }
 
     private var netColor: Color {
-        let value = Double(proposal("expected_net_btc")) ?? 0
-        return value >= 0 ? .green : .orange
+        (Double(proposal("expected_net_btc")) ?? 0) >= 0 ? .green : .orange
     }
 
     private func proposal(_ key: String) -> String {
@@ -1089,106 +972,87 @@ struct RiskBoundaryCard: View {
     }
 }
 
-struct StrategyRow: View {
-    let label: String
-    let value: String
-    let unit: String
-
-    init(_ label: String, _ value: String, _ unit: String) {
-        self.label = label
-        self.value = value
-        self.unit = unit
-    }
+struct ValueGrid: View {
+    let rows: [(String, String, String)]
 
     var body: some View {
-        HStack {
-            Text(label)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
-                .font(.body.monospacedDigit().weight(.semibold))
-            Text(unit)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    Text(row.0)
+                        .foregroundStyle(.secondary)
+                    Text(row.1)
+                        .font(.body.monospacedDigit().weight(.semibold))
+                    Text(row.2)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
-        .padding(10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
-struct ManualExposureView: View {
+struct ExposureView: View {
     @ObservedObject var store: RatchetStore
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                PageHeader(
-                    title: "Manual Exposure",
-                    subtitle: "If you manually place a Braiins order, record it here immediately so the ratchet stops creating competing experiments."
-                )
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    Card {
+                SectionHeader("Exposure Lock", "When you manually place a Braiins order, record it. The app then blocks new experiments until you close the position.")
+                HStack(alignment: .top, spacing: 18) {
+                    LiquidGlassSurface(tint: .green.opacity(0.12), cornerRadius: 34) {
                         VStack(alignment: .leading, spacing: 14) {
-                            Label("Record A Real Position", systemImage: "plus.circle")
-                                .font(.headline)
+                            Label("Record manual order", systemImage: "plus.circle")
+                                .font(.title2.weight(.black))
                             TextField("Braiins order, spend, duration, target pool", text: $store.manualDescription)
                                 .textFieldStyle(.roundedBorder)
-                            HStack {
-                                TextField("Maturity hours", text: $store.maturityHours)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 150)
-                                Button("Record Exposure") {
-                                    Task { await store.recordManualExposure() }
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(store.isWorking)
+                            TextField("Maturity hours", text: $store.maturityHours)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 170)
+                            Button("Record Exposure") {
+                                Task { await store.recordManualExposure() }
                             }
-                            Text("This does not place the order. It only records what you already did manually.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            .buttonStyle(.glassProminent)
+                            .tint(.green)
+                            .disabled(store.isWorking)
                         }
+                        .padding(22)
                     }
-
-                    Card {
+                    LiquidGlassSurface(tint: .orange.opacity(0.12), cornerRadius: 34) {
                         VStack(alignment: .leading, spacing: 14) {
-                            Label("Close Finished Position", systemImage: "checkmark.circle")
-                                .font(.headline)
+                            Label("Close finished order", systemImage: "checkmark.circle")
+                                .font(.title2.weight(.black))
                             TextField("Position ID", text: $store.closePositionId)
                                 .textFieldStyle(.roundedBorder)
-                                .frame(width: 160)
+                                .frame(width: 170)
                             Button("Close Exposure") {
                                 Task { await store.closeManualExposure() }
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.glass)
+                            .tint(.orange)
                             .disabled(store.isWorking)
-                            Text("Close only when the Braiins/OCEAN exposure is truly finished.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         }
+                        .padding(22)
                     }
                 }
-
-                Card {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label("Active Exposure Hold", systemImage: "lock.shield")
-                            .font(.headline)
+                LiquidGlassSurface(tint: .white.opacity(0.08), cornerRadius: 34) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Active exposure", systemImage: "lock.shield")
+                            .font(.title2.weight(.black))
                         if let positions = store.appState?.operatorState.activeManualPositions, !positions.isEmpty {
                             ForEach(positions, id: \.self) { position in
                                 Text(position)
                                     .font(.body.monospaced())
-                                    .padding(10)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .textSelection(.enabled)
                             }
                         } else {
                             Text("No manual exposure is active.")
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .padding(22)
                 }
             }
-            .padding(28)
         }
     }
 }
@@ -1198,30 +1062,20 @@ struct EvidenceVaultView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                PageHeader(
-                    title: "Evidence Vault",
-                    subtitle: "Raw artifacts live here. Mission Control stays graphical; this tab is for audit and debugging."
-                )
+            HStack(alignment: .bottom) {
+                SectionHeader("Evidence", "Audit trail, raw reports, and diagnostics. This is intentionally not the main UX.")
                 Spacer()
-                Button("Cockpit") {
-                    Task { await store.showCockpit() }
-                }
-                .disabled(store.isWorking)
-                Button("Report") {
-                    Task { await store.showReport() }
-                }
-                .disabled(store.isWorking)
-                Button("Ledger") {
-                    Task { await store.showLedger() }
-                }
-                .disabled(store.isWorking)
+                Button("Cockpit") { Task { await store.showCockpit() } }
+                    .buttonStyle(.glass)
+                Button("Report") { Task { await store.showReport() } }
+                    .buttonStyle(.glass)
+                Button("Ledger") { Task { await store.showLedger() } }
+                    .buttonStyle(.glass)
             }
-
-            Card {
+            LiquidGlassSurface(tint: .white.opacity(0.08), cornerRadius: 34) {
                 VStack(alignment: .leading, spacing: 12) {
                     Label(store.rawTitle, systemImage: "archivebox")
-                        .font(.headline)
+                        .font(.title2.weight(.black))
                     ScrollView {
                         Text(store.rawText)
                             .font(.body.monospaced())
@@ -1229,229 +1083,103 @@ struct EvidenceVaultView: View {
                             .textSelection(.enabled)
                     }
                 }
+                .padding(22)
             }
         }
-        .padding(28)
     }
 }
 
-struct PageHeader: View {
+struct SectionHeader: View {
     let title: String
     let subtitle: String
 
+    init(_ title: String, _ subtitle: String) {
+        self.title = title
+        self.subtitle = subtitle
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 40, weight: .black, design: .rounded))
+                .font(.system(size: 54, weight: .black, design: .rounded))
             Text(subtitle)
-                .font(.title3)
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
 
-struct HeroSurface<Content: View>: View {
+struct LiquidGlassSurface<Content: View>: View {
+    let tint: Color
+    let cornerRadius: CGFloat
     @ViewBuilder let content: Content
 
     var body: some View {
         content
-            .padding(28)
-            .background(
-                RoundedRectangle(cornerRadius: 34, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: .green.opacity(0.18), radius: 30, x: 0, y: 18)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 34, style: .continuous)
-                    .stroke(.white.opacity(0.18), lineWidth: 1)
-            )
+            .glassEffect(.regular.tint(tint).interactive(), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 
-struct Card<Content: View>: View {
-    var padding: CGFloat = 20
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        content
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .stroke(.white.opacity(0.12), lineWidth: 1)
-            )
-    }
-}
-
-struct MetricCard: View {
-    let title: String
-    let value: String
-    let detail: String
-    let symbol: String
-
-    var body: some View {
-        Card(padding: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: symbol)
-                    .font(.title2)
-                    .foregroundStyle(.green)
-                Text(title)
-                    .font(.caption.weight(.heavy))
-                    .textCase(.uppercase)
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.title2.weight(.black))
-                    .lineLimit(1)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-        }
-    }
-}
-
-struct SafetyRow: View {
-    var body: some View {
-        HStack(spacing: 10) {
-            Label("No hidden bids", systemImage: "lock")
-            Label("Manual Braiins execution", systemImage: "hand.point.up.left")
-            Label("Repo-local state", systemImage: "externaldrive")
-        }
-        .font(.caption.weight(.bold))
-        .foregroundStyle(.secondary)
-    }
-}
-
-struct EngineBadge: View {
-    let status: EngineStatusPayload?
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: status?.running == true ? "dot.radiowaves.left.and.right" : "power")
-                .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(status?.running == true ? .green : .secondary)
-            Text(status?.running == true ? "engine running" : "engine stopped")
-                .font(.headline)
-            Text(status?.detail ?? "loading engine status")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-    }
-}
-
-struct PhaseOrb: View {
-    let phase: ResearchPhase
+struct EngineBeacon: View {
     let running: Bool
 
     var body: some View {
         ZStack {
-            ForEach(0..<4) { index in
-                Circle()
-                    .stroke(
-                        AngularGradient(
-                            colors: [.green.opacity(0.14), .mint.opacity(0.74), .orange.opacity(0.54), .green.opacity(0.14)],
-                            center: .center
-                        ),
-                        lineWidth: CGFloat(12 - index * 2)
+            Circle()
+                .fill((running ? Color.green : Color.secondary).opacity(0.18))
+                .frame(width: 62, height: 62)
+            Image(systemName: running ? "dot.radiowaves.left.and.right" : "power")
+                .font(.title2.weight(.black))
+                .foregroundStyle(running ? .green : .secondary)
+        }
+        .glassEffect(.regular.tint((running ? Color.green : Color.secondary).opacity(0.18)), in: Circle())
+    }
+}
+
+struct HashfieldBackdrop: View {
+    let pulse: Bool
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            Canvas { context, size in
+                let seconds = timeline.date.timeIntervalSinceReferenceDate
+                let base = CGRect(origin: .zero, size: size)
+                context.fill(Path(base), with: .linearGradient(
+                    Gradient(colors: [
+                        Color(red: 0.015, green: 0.018, blue: 0.025),
+                        Color(red: 0.015, green: 0.075, blue: 0.07),
+                        Color(red: 0.16, green: 0.12, blue: 0.05)
+                    ]),
+                    startPoint: .zero,
+                    endPoint: CGPoint(x: size.width, y: size.height)
+                ))
+
+                for index in 0..<36 {
+                    let t = Double(index) * 0.37 + seconds * 0.08
+                    let x = (sin(t) * 0.5 + 0.5) * size.width
+                    let y = (cos(t * 0.73) * 0.5 + 0.5) * size.height
+                    let radius = CGFloat(28 + (index % 7) * 12)
+                    let rect = CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)
+                    context.fill(
+                        Path(ellipseIn: rect),
+                        with: .radialGradient(
+                            Gradient(colors: [.green.opacity(0.10), .clear]),
+                            center: CGPoint(x: x, y: y),
+                            startRadius: 0,
+                            endRadius: radius
+                        )
                     )
-                    .frame(width: CGFloat(170 + index * 28), height: CGFloat(170 + index * 28))
-                    .rotationEffect(.degrees(running ? Double(18 * (index + 1)) : Double(-8 * (index + 1))))
-                    .opacity(0.72 - Double(index) * 0.12)
+                }
             }
-
-            Circle()
-                .fill(.regularMaterial)
-                .frame(width: 154, height: 154)
-
-            VStack(spacing: 8) {
-                Image(systemName: phase.symbol)
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundStyle(.green)
-                Text(phase.title)
-                    .font(.title2.weight(.black))
-                Text("ratchet phase")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+            .overlay {
+                AngularGradient(
+                    colors: [.clear, .white.opacity(0.035), .clear, .green.opacity(0.06), .clear],
+                    center: .center
+                )
+                .opacity(pulse ? 1 : 0.55)
+                .animation(.easeInOut(duration: 4.8).repeatForever(autoreverses: true), value: pulse)
             }
-        }
-    }
-}
-
-struct CooldownRing: View {
-    let watch: CompletedWatchPayload
-
-    private var progress: Double {
-        guard watch.cooldownMinutes > 0 else { return 1 }
-        return min(1, max(0, 1 - Double(watch.remainingMinutes) / Double(watch.cooldownMinutes)))
-    }
-
-    var body: some View {
-        VStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .stroke(.secondary.opacity(0.18), lineWidth: 12)
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(.green.gradient, style: StrokeStyle(lineWidth: 12, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                Text("\(Int(progress * 100))%")
-                    .font(.title2.monospacedDigit().weight(.black))
-            }
-            .frame(width: 120, height: 120)
-
-            Text("cooldown")
-                .font(.headline)
-            Text("\(watch.remainingMinutes)m left")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-            Text(watch.earliestActionLocal)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-    }
-}
-
-struct AppBackdrop: View {
-    let animate: Bool
-
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.025, green: 0.045, blue: 0.055),
-                    Color(red: 0.045, green: 0.135, blue: 0.13),
-                    Color(red: 0.20, green: 0.18, blue: 0.11)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Circle()
-                .fill(.green.opacity(animate ? 0.24 : 0.10))
-                .frame(width: 620, height: 620)
-                .blur(radius: 100)
-                .offset(x: -380, y: -290)
-            Circle()
-                .fill(.orange.opacity(animate ? 0.17 : 0.07))
-                .frame(width: 520, height: 520)
-                .blur(radius: 120)
-                .offset(x: 500, y: 300)
-            RoundedRectangle(cornerRadius: 100, style: .continuous)
-                .stroke(.white.opacity(0.06), lineWidth: 1)
-                .frame(width: 900, height: 540)
-                .rotationEffect(.degrees(-12))
-                .offset(x: 270, y: -170)
         }
         .ignoresSafeArea()
     }
@@ -1485,49 +1213,49 @@ enum Decision {
 
     var title: String {
         switch self {
-        case .load: return "LOAD"
-        case .busy: return "WORKING"
-        case .hold: return "HOLD"
-        case .waitWatch: return "WAIT"
-        case .cooldown: return "COOLDOWN"
-        case .engine: return "ENGINE ON"
-        case .refresh: return "REFRESH"
-        case .watch: return "WATCH"
-        case .review: return "REVIEW"
-        case .observe: return "OBSERVE"
+        case .load: "LOAD"
+        case .busy: "WORKING"
+        case .hold: "HOLD"
+        case .waitWatch: "WAIT"
+        case .cooldown: "COOLDOWN"
+        case .engine: "ENGINE LIVE"
+        case .refresh: "REFRESH"
+        case .watch: "WATCH"
+        case .review: "REVIEW"
+        case .observe: "OBSERVE"
         }
     }
 
     var explanation: String {
         switch self {
         case .load:
-            return "Reading the durable SQLite state and latest evidence."
+            "Reading the durable SQLite state and latest evidence."
         case .busy(let operation):
-            return "\(operation) is running. Do not start a competing operation."
+            "\(operation) is running. Do not start a competing operation."
         case .hold:
-            return "A real manual Braiins exposure is active. The app must supervise, not generate new experiments."
+            "A real Braiins/OCEAN exposure is active. The ratchet must hold."
         case .waitWatch:
-            return "A passive watch is already running. Starting another would corrupt attribution."
+            "A passive watch already owns the research window."
         case .cooldown(let time):
-            return "The last watch already produced evidence. Earliest useful next action: \(time)."
+            "The latest watch is evidence. Earliest useful action: \(time)."
         case .engine:
-            return "The forever monitor engine owns passive research. Your workload is zero unless a manual exposure exists."
+            "The background engine owns passive research. You do not babysit it."
         case .refresh:
-            return "The market state is stale or missing. One fresh sample is useful before any new watch."
+            "The market state is stale or missing. Take one fresh sample."
         case .watch:
-            return "A bounded passive watch is useful. It buys information; it does not spend BTC."
+            "A bounded passive watch is useful. It buys information, not BTC exposure."
         case .review:
-            return "A stricter manual-bid signal exists. Read the report before any Braiins action."
+            "A stricter bid signal exists. Read evidence before any manual Braiins action."
         case .observe:
-            return "No useful bid window is visible. Waiting is a valid action."
+            "No useful window is visible. Waiting is valid."
         }
     }
 
     var color: Color {
         switch self {
-        case .load, .observe: return .secondary
-        case .busy, .hold, .waitWatch, .cooldown: return .orange
-        case .engine, .refresh, .watch, .review: return .green
+        case .load, .observe: .secondary
+        case .busy, .hold, .waitWatch, .cooldown: .orange
+        case .engine, .refresh, .watch, .review: .green
         }
     }
 }
@@ -1553,44 +1281,44 @@ enum ControlOwner {
 
     var title: String {
         switch self {
-        case .app: return "The app is ready"
-        case .engine: return "Forever engine"
-        case .watch: return "Watch run"
-        case .cooldown: return "Cooldown"
-        case .manual: return "Manual exposure"
-        case .busy: return "Current operation"
-        case .loading: return "Loading"
+        case .app: "App ready"
+        case .engine: "Forever engine"
+        case .watch: "Watch run"
+        case .cooldown: "Cooldown"
+        case .manual: "Manual exposure"
+        case .busy: "Operation"
+        case .loading: "Loading"
         }
     }
 
     var detail: String {
         switch self {
         case .app:
-            return "No active watch, no cooldown block, and no manual exposure. Use the enabled action."
+            "No active watch, cooldown, or manual exposure. Use the enabled action."
         case .engine:
-            return "The background monitor engine waits, samples, writes reports, and resumes after restarts when you start it again."
+            "The background monitor loop owns passive sampling and report writing."
         case .watch:
-            return "A passive watch owns the research window. Wait for its report."
+            "Wait for the watch report. Duplicate watches destroy attribution."
         case .cooldown(let time):
-            return "The latest report owns the next decision. Wait until \(time)."
+            "The latest report owns the decision until \(time)."
         case .manual:
-            return "A real-money exposure is active. Close it only after the Braiins/OCEAN position is actually finished."
+            "Real money is active. Close only when the position is truly finished."
         case .busy:
-            return "A backend operation is running. The safe action is to wait."
+            "A backend operation is running. Wait."
         case .loading:
-            return "The app is reading local state."
+            "Reading local state."
         }
     }
 
     var symbol: String {
         switch self {
-        case .app: return "scope"
-        case .engine: return "dot.radiowaves.left.and.right"
-        case .watch: return "binoculars"
-        case .cooldown: return "timer"
-        case .manual: return "lock.shield"
-        case .busy: return "gearshape.2"
-        case .loading: return "questionmark.circle"
+        case .app: "scope"
+        case .engine: "dot.radiowaves.left.and.right"
+        case .watch: "binoculars"
+        case .cooldown: "timer"
+        case .manual: "lock.shield"
+        case .busy: "gearshape.2"
+        case .loading: "questionmark.circle"
         }
     }
 }
@@ -1613,34 +1341,12 @@ enum ResearchPhase {
         return .adapt
     }
 
-    var title: String {
-        switch self {
-        case .loading: return "Loading"
-        case .refresh: return "Sense"
-        case .watch: return "Watch"
-        case .cooldown: return "Mature"
-        case .manual: return "Hold"
-        case .adapt: return "Adapt"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .loading: return "questionmark"
-        case .refresh: return "antenna.radiowaves.left.and.right"
-        case .watch: return "binoculars"
-        case .cooldown: return "hourglass"
-        case .manual: return "lock.shield"
-        case .adapt: return "slider.horizontal.3"
-        }
-    }
-
     var index: Int {
         switch self {
-        case .loading, .refresh: return 0
-        case .watch: return 2
-        case .cooldown, .manual: return 3
-        case .adapt: return 4
+        case .loading, .refresh: 0
+        case .watch: 2
+        case .cooldown, .manual: 3
+        case .adapt: 4
         }
     }
 }
@@ -1755,11 +1461,11 @@ struct ConfigPayload: Codable {
 
     func value(_ section: String, _ key: String) -> String? {
         switch section {
-        case "capital": return capital?[key]?.description
-        case "ocean": return ocean?[key]?.description
-        case "guardrails": return guardrails?[key]?.description
-        case "strategy": return strategy?[key]?.description
-        default: return nil
+        case "capital": capital?[key]?.description
+        case "ocean": ocean?[key]?.description
+        case "guardrails": guardrails?[key]?.description
+        case "strategy": strategy?[key]?.description
+        default: nil
         }
     }
 }
@@ -1818,63 +1524,36 @@ enum AppIconFactory {
         image.lockFocus()
 
         let rect = NSRect(x: 0, y: 0, width: size, height: size)
-        let corner = size * 0.22
-        let path = NSBezierPath(
-            roundedRect: rect.insetBy(dx: size * 0.04, dy: size * 0.04),
-            xRadius: corner,
-            yRadius: corner
-        )
-        NSGradient(
-            colors: [
-                NSColor(red: 0.02, green: 0.08, blue: 0.09, alpha: 1),
-                NSColor(red: 0.03, green: 0.30, blue: 0.26, alpha: 1),
-                NSColor(red: 0.70, green: 0.95, blue: 0.48, alpha: 1)
-            ]
-        )?.draw(in: path, angle: -35)
+        let path = NSBezierPath(roundedRect: rect.insetBy(dx: size * 0.04, dy: size * 0.04), xRadius: size * 0.24, yRadius: size * 0.24)
+        NSGradient(colors: [
+            NSColor(red: 0.01, green: 0.04, blue: 0.05, alpha: 1),
+            NSColor(red: 0.00, green: 0.36, blue: 0.30, alpha: 1),
+            NSColor(red: 0.78, green: 1.00, blue: 0.46, alpha: 1)
+        ])?.draw(in: path, angle: -35)
 
-        NSColor.white.withAlphaComponent(0.20).setStroke()
-        path.lineWidth = size * 0.012
+        NSColor.white.withAlphaComponent(0.24).setStroke()
+        path.lineWidth = size * 0.014
         path.stroke()
 
-        let ringRect = rect.insetBy(dx: size * 0.18, dy: size * 0.18)
-        let ring = NSBezierPath(ovalIn: ringRect)
-        NSColor(red: 0.78, green: 1.0, blue: 0.72, alpha: 0.24).setFill()
+        let center = NSPoint(x: size * 0.5, y: size * 0.5)
+        let ring = NSBezierPath(ovalIn: rect.insetBy(dx: size * 0.18, dy: size * 0.18))
+        NSColor.white.withAlphaComponent(0.16).setFill()
         ring.fill()
 
-        let core = NSBezierPath(ovalIn: rect.insetBy(dx: size * 0.31, dy: size * 0.31))
-        NSColor(red: 0.01, green: 0.06, blue: 0.07, alpha: 0.88).setFill()
-        core.fill()
-
         let ratchet = NSBezierPath()
-        let teeth = 12
-        let center = NSPoint(x: size * 0.5, y: size * 0.5)
-        for index in 0..<(teeth * 2) {
-            let angle = (Double(index) / Double(teeth * 2)) * Double.pi * 2
-            let radius = size * (index.isMultiple(of: 2) ? 0.26 : 0.19)
-            let point = NSPoint(
-                x: center.x + CGFloat(cos(angle)) * radius,
-                y: center.y + CGFloat(sin(angle)) * radius
-            )
-            if index == 0 {
-                ratchet.move(to: point)
-            } else {
-                ratchet.line(to: point)
-            }
+        for index in 0..<24 {
+            let angle = (Double(index) / 24.0) * Double.pi * 2
+            let radius = size * (index.isMultiple(of: 2) ? 0.29 : 0.20)
+            let point = NSPoint(x: center.x + CGFloat(cos(angle)) * radius, y: center.y + CGFloat(sin(angle)) * radius)
+            index == 0 ? ratchet.move(to: point) : ratchet.line(to: point)
         }
         ratchet.close()
-        NSColor(red: 0.94, green: 0.77, blue: 0.33, alpha: 0.96).setFill()
+        NSColor(red: 0.96, green: 0.75, blue: 0.28, alpha: 0.98).setFill()
         ratchet.fill()
 
-        let arrow = NSBezierPath()
-        arrow.move(to: NSPoint(x: size * 0.42, y: size * 0.48))
-        arrow.line(to: NSPoint(x: size * 0.61, y: size * 0.66))
-        arrow.line(to: NSPoint(x: size * 0.64, y: size * 0.51))
-        arrow.line(to: NSPoint(x: size * 0.77, y: size * 0.54))
-        arrow.line(to: NSPoint(x: size * 0.58, y: size * 0.77))
-        arrow.line(to: NSPoint(x: size * 0.36, y: size * 0.60))
-        arrow.close()
-        NSColor(red: 0.74, green: 1.0, blue: 0.72, alpha: 0.95).setFill()
-        arrow.fill()
+        let core = NSBezierPath(ovalIn: rect.insetBy(dx: size * 0.39, dy: size * 0.39))
+        NSColor(red: 0.02, green: 0.09, blue: 0.08, alpha: 1).setFill()
+        core.fill()
 
         image.unlockFocus()
         return image

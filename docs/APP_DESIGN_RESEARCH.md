@@ -50,14 +50,16 @@ The native app now treats the Python engine as a structured state provider, not 
 - Cockpit text for audit/debug.
 - Latest OCEAN, Braiins, and strategy proposal payloads.
 
-The SwiftUI app turns that into native surfaces:
+The SwiftUI app turns that into native Tahoe surfaces:
 
-- `Mission Control`: current decision, control ownership, forever engine, cooldown, and evidence.
-- `Mining Stack`: Umbrel, Knots, Datum, OCEAN, Braiins, and block-luck interplay.
+- `Flight Deck`: giant decision word, glass control pucks, reactor lens, engine controls, and key instruments.
+- `Hashflow`: Umbrel, Knots, Datum, OCEAN, Braiins, and block-luck interplay.
 - `Ratchet`: the observe, price, watch, mature, adapt pathway.
-- `Strategy Lab`: shadow order, expected net, breakeven, and loss boundary.
-- `Manual Exposure`: the ledger for real manually placed Braiins exposure.
-- `Evidence Vault`: raw artifacts kept available but no longer primary.
+- `Bid Lab`: shadow order, expected net, breakeven, and loss boundary.
+- `Exposure`: the ledger for real manually placed Braiins exposure.
+- `Evidence`: raw artifacts kept available but no longer primary.
+
+The UI uses real Tahoe SwiftUI APIs where available in the local SDK: `glassEffect`, `GlassEffectContainer`, `.glass`, `.glassProminent`, `backgroundExtensionEffect`, and toolbar search. These are intentionally concentrated on the shell, action controls, and reactor instruments instead of coating every paragraph in glass.
 
 ## The Ratchet UX Rule
 

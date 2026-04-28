@@ -134,6 +134,7 @@ cmd_app() {
   local app_path
   app_path="$("$ROOT_DIR/scripts/build_mac_app" | tail -n 1)"
   echo "Opening $app_path"
+  pkill -x BraiinsRatchetMac 2>/dev/null || true
   open "$app_path"
 }
 

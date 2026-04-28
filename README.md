@@ -2,7 +2,7 @@
 
 Monitor-only research scaffold for optimizing a manual "buy hashpower on Braiins, mine through OCEAN" strategy.
 
-The first implementation is deliberately conservative:
+The current implementation is monitor-only by design:
 
 - The code never places, modifies, or cancels Braiins orders.
 - The default strategy emits recommendations only.
@@ -10,7 +10,7 @@ The first implementation is deliberately conservative:
 - The Braiins integration accepts a watcher-only token only.
 - All mutable runtime state stays inside this repository under `data/`.
 - The Git branch is `master`.
-- The project uses Python standard library only.
+- The lifecycle engine uses Python standard library only; the native Mac app is SwiftUI.
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ The first implementation is deliberately conservative:
 ./scripts/ratchet app
 ```
 
-This builds and opens the native macOS control room. Use the app for normal operation; terminal commands are advanced fallback tools.
+This rebuilds the native macOS control room, replaces any stale app window, and opens the fresh bundle. Use the app for normal operation; terminal commands are advanced fallback tools.
 
 The lifecycle state persists in `data/ratchet.sqlite`. If the app or Mac restarts, open the app again and it reads the same state.
 
@@ -42,9 +42,9 @@ For the native macOS app:
 ./scripts/ratchet app
 ```
 
-This builds `macos/build/Braiins Ratchet.app` and opens the real app bundle. Do not use `swift run` for normal operation.
+This builds `macos/build/Braiins Ratchet.app`, closes any stale `BraiinsRatchetMac` UI process, and opens the real app bundle. Do not use `swift run` for normal operation.
 
-The app is a native visual control room: Mission Control, Mining Stack, Ratchet, Strategy Lab, Manual Exposure, and Evidence Vault. The design rationale is in `docs/APP_DESIGN_RESEARCH.md`.
+The app is a native Tahoe Flight Deck: animated hashfield background, real SwiftUI Liquid Glass controls, Hashflow, Ratchet, Bid Lab, Exposure, and Evidence. The design rationale is in `docs/APP_DESIGN_RESEARCH.md`.
 
 Advanced fallback for a 6-hour CLI monitoring session:
 

@@ -15,11 +15,11 @@ Your job is not to understand every metric.
 Your job is:
 
 1. Open the app with `./scripts/ratchet app`.
-2. Stay on `Mission Control` unless you intentionally need another tab.
-3. Read `Current Decision` first.
-4. Read `Who Owns Control` second.
+2. Stay on `Flight Deck` unless you intentionally need another tab.
+3. Read the giant decision word first.
+4. Read the glass `control` and `next` pucks second.
 5. Prefer `Start Forever Engine` when you want the app to keep the monitor-only lifecycle moving without babysitting.
-6. If you manually place a Braiins canary, record it in `Manual Exposure` immediately.
+6. If you manually place a Braiins canary, record it in `Exposure` immediately.
 
 Do not start extra terminal watches while the app says a watch, cooldown, or manual exposure owns control.
 
@@ -66,14 +66,16 @@ Build and open the real app bundle:
 
 This creates `macos/build/Braiins Ratchet.app`. After that, you can open that app bundle directly from Finder or pin it in the Dock.
 
+The launcher rebuilds the app and replaces any already-running `BraiinsRatchetMac` UI process before opening the bundle. That prevents macOS from simply focusing an old window after a redesign.
+
 The app is organized as:
 
-1. `Mission Control`: current decision, control ownership, forever engine controls, cooldown progress, and evidence.
-2. `Mining Stack`: the Umbrel, Knots, Datum, OCEAN, and Braiins interplay.
+1. `Flight Deck`: giant decision word, glass control pucks, reactor lens, engine controls, and key instruments.
+2. `Hashflow`: the Umbrel, Knots, Datum, OCEAN, and Braiins interplay.
 3. `Ratchet`: the observe, price, watch, mature, adapt learning loop.
-4. `Strategy Lab`: shadow order, expected net, breakeven, and loss boundary.
-5. `Manual Exposure`: record or close manually executed Braiins exposure.
-6. `Evidence Vault`: raw cockpit, report, and ledger artifacts for diagnostics.
+4. `Bid Lab`: shadow order, expected net, breakeven, and loss boundary.
+5. `Exposure`: record or close manually executed Braiins exposure.
+6. `Evidence`: raw cockpit, report, and ledger artifacts for diagnostics.
 
 ## Research Pathway
 
@@ -107,7 +109,7 @@ Each completed watch creates one run report:
 reports/run-*.md
 ```
 
-Use the app's `Evidence Vault` tab when you need raw artifacts. Mission Control intentionally hides raw logs during normal operation.
+Use the app's `Evidence` tab when you need raw artifacts. Flight Deck intentionally hides raw logs during normal operation.
 
 ## Advanced Fallback Commands
 

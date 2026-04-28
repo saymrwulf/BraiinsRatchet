@@ -2,7 +2,7 @@
 
 Native SwiftUI control room for the durable Braiins Ratchet lifecycle engine.
 
-The Python lifecycle engine remains the source of truth. This app reads the same repository-local SQLite state through structured app state, not by making Mission Control a terminal transcript.
+The Python lifecycle engine remains the source of truth. This app reads the same repository-local SQLite state through structured app state, not by making the Flight Deck a terminal transcript.
 
 ## Normal Run
 
@@ -10,18 +10,18 @@ The Python lifecycle engine remains the source of truth. This app reads the same
 ./scripts/ratchet app
 ```
 
-This builds `macos/build/Braiins Ratchet.app` and opens the packaged app. Use this path for normal operation.
+This builds `macos/build/Braiins Ratchet.app`, closes any stale `BraiinsRatchetMac` UI process, and opens the fresh packaged app. Use this path for normal operation.
 
 ## Current Scope
 
-- Native macOS SwiftUI control room.
-- Mission Control with one explicit decision and control owner.
-- Mining Stack view for Umbrel, Knots, Datum, OCEAN, and Braiins interplay.
+- Native macOS Tahoe SwiftUI Flight Deck.
+- Real Liquid Glass APIs: `glassEffect`, `GlassEffectContainer`, `.glass`, `.glassProminent`, toolbar search, and `backgroundExtensionEffect`.
+- Hashflow view for Umbrel, Knots, Datum, OCEAN, and Braiins interplay.
 - Ratchet view for the full autoresearch pathway.
-- Strategy Lab for shadow orders and loss boundaries.
+- Bid Lab for shadow orders and loss boundaries.
 - Forever Engine controls for the monitor-only background lifecycle.
 - Manual exposure recording and closing controls.
-- Evidence Vault for raw artifacts and backend diagnostics.
+- Evidence view for raw artifacts and backend diagnostics.
 - Monitor-only. It never places Braiins orders.
 
 ## Product Direction
