@@ -10,6 +10,7 @@ from braiins_ratchet.lifecycle import (
     init_lifecycle_db,
     list_manual_positions,
     open_manual_position,
+    recover_stale_active_watch,
     render_manual_positions,
     render_lifecycle_status,
     render_supervisor_plan,
@@ -92,6 +93,32 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(status.phase, "cooldown")
         self.assertEqual(status.next_action_utc, "2026-04-28T15:41:51+00:00")
         self.assertIn("recent watch report", status.message)
+
+    def test_recover_stale_active_watch_writes_partial_report_and_cooldown(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        init_lifecycle_db(conn)
+        active_watch = SimpleNamespace(
+            read_text=lambda encoding: (
+                '{"pid": 123456, "run_id": "run-crashed", '
+                '"started_utc": "2026-04-29T08:48:06+00:00", '
+                '"planned_cycles": 24, "interval_seconds": 300}'
+            )
+        )
+
+        with (
+            patch("braiins_ratchet.lifecycle.ACTIVE_WATCH", active_watch),
+            patch("braiins_ratchet.lifecycle._pid_exists", return_value=False),
+            patch("braiins_ratchet.lifecycle.finish_experiment", return_value="reports/run-crashed.md") as finish,
+        ):
+            report = recover_stale_active_watch(conn)
+
+        status = get_lifecycle_status(conn)
+        self.assertEqual(report, "reports/run-crashed.md")
+        self.assertEqual(status.phase, "cooldown")
+        self.assertEqual(status.last_run_id, "run-crashed")
+        self.assertIn("watch recovered after engine crash", status.message)
+        finish.assert_called_once()
+        self.assertEqual(finish.call_args.kwargs["status"], "recovered_after_crash")
 
 
 if __name__ == "__main__":

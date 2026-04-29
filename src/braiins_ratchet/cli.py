@@ -23,6 +23,7 @@ from .guidance import build_operator_cockpit, get_operator_state
 from .lifecycle import (
     close_manual_position,
     open_manual_position,
+    recover_stale_active_watch,
     render_lifecycle_status,
     render_manual_positions,
     render_supervisor_plan,
@@ -42,6 +43,7 @@ from .storage import (
     save_proposal,
 )
 from .strategy import propose
+from .watch_loop import run_watch_loop
 
 
 def cmd_init_db(_: argparse.Namespace) -> int:
@@ -108,21 +110,31 @@ def cmd_watch(args: argparse.Namespace) -> int:
     print(f"experiment: {experiment.run_id}")
 
     with connect() as conn:
-        status = "completed"
         return_code = 0
-        try:
-            for index in range(args.cycles):
-                result = run_cycle(conn, config)
-                print(
-                    f"cycle {index + 1}/{args.cycles}: "
-                    f"{result.proposal.action} - {result.proposal.reason}"
-                )
-                if index + 1 < args.cycles:
-                    time.sleep(args.interval_seconds)
-        except KeyboardInterrupt:
-            status = "interrupted"
+        summary = run_watch_loop(
+            conn,
+            config,
+            planned_cycles=args.cycles,
+            interval_seconds=args.interval_seconds,
+            on_cycle=lambda index, total, result: print(
+                f"cycle {index}/{total}: {result.proposal.action} - {result.proposal.reason}",
+                flush=True,
+            ),
+            on_failure=lambda index, total, exc, consecutive: print(
+                f"cycle {index}/{total}: transient_error - {type(exc).__name__}: {exc} "
+                f"(consecutive failures: {consecutive}/3)",
+                flush=True,
+            ),
+            sleep=time.sleep,
+        )
+        if summary.status == "interrupted":
             return_code = 130
             print("interrupted: writing partial experiment report before exit")
+        elif summary.failed_cycles:
+            print(
+                f"watch degraded: {summary.failed_cycles} failed cycle(s), "
+                f"{summary.successful_cycles} successful cycle(s); writing {summary.status} report"
+            )
         report_path = finish_experiment(
             conn,
             experiment.run_id,
@@ -130,7 +142,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
             args.cycles,
             args.interval_seconds,
             args.hypothesis,
-            status=status,
+            status=summary.status,
         )
     print(f"experiment_report: {report_path}")
     return return_code
@@ -156,6 +168,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 def cmd_next(_: argparse.Namespace) -> int:
     with connect() as conn:
         init_db(conn)
+        recover_stale_active_watch(conn)
         print(build_operator_cockpit(conn))
     return 0
 
@@ -164,6 +177,7 @@ def cmd_app_state(_: argparse.Namespace) -> int:
     config = load_config(None)
     with connect() as conn:
         init_db(conn)
+        recover_stale_active_watch(conn)
         operator_state = get_operator_state(conn)
         automation_plan = build_automation_plan(conn)
         payload = {

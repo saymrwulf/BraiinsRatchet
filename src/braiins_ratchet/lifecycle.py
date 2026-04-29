@@ -3,17 +3,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import json
+import os
 import time
 
 from .config import AppConfig
-from .experiments import finish_experiment, start_experiment
+from .experiments import ACTIVE_WATCH, finish_experiment, start_experiment
 from .guidance import POST_WATCH_COOLDOWN_MINUTES, build_operator_cockpit, get_operator_state
-from .monitor import run_cycle
 from .storage import connect, init_db
+from .watch_loop import run_watch_loop
 
 
 DEFAULT_WATCH_CYCLES = 24
 DEFAULT_INTERVAL_SECONDS = 300
+MAX_CONSECUTIVE_CYCLE_FAILURES = 3
 
 
 @dataclass(frozen=True)
@@ -134,11 +136,13 @@ def render_supervisor_plan() -> str:
 def run_supervisor(config: AppConfig, *, once: bool = False) -> int:
     with connect() as conn:
         init_lifecycle_db(conn)
+        recover_stale_active_watch(conn)
         _record_event(conn, "supervisor_started", {"once": once})
 
     while True:
         with connect() as conn:
             init_lifecycle_db(conn)
+            recover_stale_active_watch(conn)
             active_positions = list_manual_positions(conn, status="active")
             if active_positions:
                 _handle_manual_exposure(conn, active_positions)
@@ -188,6 +192,52 @@ def run_supervisor(config: AppConfig, *, once: bool = False) -> int:
             return 0
 
 
+def recover_stale_active_watch(conn) -> str | None:
+    init_lifecycle_db(conn)
+    payload = _read_active_watch_payload()
+    if payload is None:
+        return None
+
+    pid = payload.get("pid")
+    if isinstance(pid, int) and _pid_exists(pid):
+        return None
+
+    run_id = str(payload.get("run_id") or "recovered-watch")
+    started_utc = str(payload.get("started_utc") or datetime.now(UTC).isoformat(timespec="seconds"))
+    planned_cycles = _safe_int(payload.get("planned_cycles"), DEFAULT_WATCH_CYCLES)
+    interval_seconds = _safe_int(payload.get("interval_seconds"), DEFAULT_INTERVAL_SECONDS)
+    report_path = finish_experiment(
+        conn,
+        run_id,
+        started_utc,
+        planned_cycles,
+        interval_seconds,
+        "recovered stale watch after the monitor engine stopped before final bookkeeping",
+        status="recovered_after_crash",
+    )
+    next_action = datetime.now(UTC) + timedelta(minutes=POST_WATCH_COOLDOWN_MINUTES)
+    _write_state(
+        conn,
+        {
+            "phase": "cooldown",
+            "next_action_utc": next_action.isoformat(timespec="seconds"),
+            "last_run_id": run_id,
+            "message": "watch recovered after engine crash; partial report written; cooldown active",
+        },
+    )
+    _record_event(
+        conn,
+        "watch_recovered_after_crash",
+        {
+            "run_id": run_id,
+            "stale_pid": pid,
+            "report": report_path,
+            "next_action_utc": next_action.isoformat(timespec="seconds"),
+        },
+    )
+    return report_path
+
+
 def _run_watch_stage(config: AppConfig) -> str:
     experiment = start_experiment(
         DEFAULT_WATCH_CYCLES,
@@ -207,20 +257,31 @@ def _run_watch_stage(config: AppConfig) -> str:
         )
         _record_event(conn, "watch_started", {"run_id": experiment.run_id})
 
-        status = "completed"
-        try:
-            for index in range(DEFAULT_WATCH_CYCLES):
-                result = run_cycle(conn, config)
-                print(
-                    f"cycle {index + 1}/{DEFAULT_WATCH_CYCLES}: "
-                    f"{result.proposal.action} - {result.proposal.reason}",
-                    flush=True,
-                )
-                if index + 1 < DEFAULT_WATCH_CYCLES:
-                    time.sleep(DEFAULT_INTERVAL_SECONDS)
-        except KeyboardInterrupt:
-            status = "interrupted"
+        summary = run_watch_loop(
+            conn,
+            config,
+            planned_cycles=DEFAULT_WATCH_CYCLES,
+            interval_seconds=DEFAULT_INTERVAL_SECONDS,
+            max_consecutive_failures=MAX_CONSECUTIVE_CYCLE_FAILURES,
+            on_cycle=_print_cycle_result,
+            on_failure=lambda index, total, exc, consecutive: _record_cycle_failure(
+                conn,
+                experiment.run_id,
+                index,
+                total,
+                exc,
+                consecutive,
+            ),
+            sleep=time.sleep,
+        )
+        if summary.status == "interrupted":
             print("interrupted: writing partial experiment report before exit", flush=True)
+        elif summary.failed_cycles:
+            print(
+                f"watch degraded: {summary.failed_cycles} failed cycle(s), "
+                f"{summary.successful_cycles} successful cycle(s); writing {summary.status} report",
+                flush=True,
+            )
         report_path = finish_experiment(
             conn,
             experiment.run_id,
@@ -228,10 +289,56 @@ def _run_watch_stage(config: AppConfig) -> str:
             DEFAULT_WATCH_CYCLES,
             DEFAULT_INTERVAL_SECONDS,
             "forever supervisor: bounded passive watch stage",
-            status=status,
+            status=summary.status,
         )
-        _record_event(conn, "watch_report_written", {"run_id": experiment.run_id, "report": report_path})
+        _record_event(
+            conn,
+            "watch_report_written",
+            {
+                "run_id": experiment.run_id,
+                "report": report_path,
+                "status": summary.status,
+                "successful_cycles": summary.successful_cycles,
+                "failed_cycles": summary.failed_cycles,
+                "last_error": summary.last_error,
+            },
+        )
     return experiment.run_id
+
+
+def _print_cycle_result(index: int, total: int, result) -> None:
+    print(
+        f"cycle {index}/{total}: "
+        f"{result.proposal.action} - {result.proposal.reason}",
+        flush=True,
+    )
+
+
+def _record_cycle_failure(
+    conn,
+    run_id: str,
+    index: int,
+    total: int,
+    exc: Exception,
+    consecutive_failures: int,
+) -> None:
+    message = f"{type(exc).__name__}: {exc}"
+    print(
+        f"cycle {index}/{total}: transient_error - {message} "
+        f"(consecutive failures: {consecutive_failures}/{MAX_CONSECUTIVE_CYCLE_FAILURES})",
+        flush=True,
+    )
+    _record_event(
+        conn,
+        "watch_cycle_failed",
+        {
+            "run_id": run_id,
+            "cycle": index,
+            "planned_cycles": total,
+            "consecutive_failures": consecutive_failures,
+            "error": message,
+        },
+    )
 
 
 def _sync_recent_watch_cooldown(conn) -> int:
@@ -425,6 +532,31 @@ def _earliest_maturity(positions: list[ManualPosition]) -> datetime | None:
 def _read_state(conn) -> dict[str, str]:
     rows = conn.execute("SELECT key, value FROM lifecycle_state").fetchall()
     return {row[0]: row[1] for row in rows}
+
+
+def _read_active_watch_payload() -> dict[str, object] | None:
+    try:
+        return json.loads(ACTIVE_WATCH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def _safe_int(value: object, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _pid_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def _write_state(conn, values: dict[str, str]) -> None:
