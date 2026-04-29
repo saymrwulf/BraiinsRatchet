@@ -39,6 +39,21 @@ class EngineStatusTests(unittest.TestCase):
             self.assertEqual(status.pid, 12345)
             self.assertEqual(paths["pid"].read_text(encoding="utf-8"), "12345")
 
+    def test_engine_status_uses_active_watch_when_process_table_is_unavailable(self) -> None:
+        with _isolated_engine_paths() as paths:
+            paths["active_watch"].parent.mkdir(parents=True, exist_ok=True)
+            paths["active_watch"].write_text('{"pid": 456, "run_id": "run-example"}', encoding="utf-8")
+            with (
+                patch.object(engine, "_find_supervisor_pid", return_value=None),
+                patch.object(engine, "_pid_exists", return_value=True),
+            ):
+                status = engine.get_engine_status()
+
+            self.assertTrue(status.running)
+            self.assertEqual(status.pid, 456)
+            self.assertIn("watch is running", status.detail)
+            self.assertEqual(paths["pid"].read_text(encoding="utf-8"), "456")
+
     def test_render_engine_status_is_noob_readable(self) -> None:
         text = engine.render_engine_status(
             engine.EngineStatus(
@@ -85,6 +100,7 @@ class _isolated_engine_paths:
             "logs": root / "logs",
             "pid": root / "data" / "supervisor.pid",
             "log": root / "logs" / "supervisor.log",
+            "active_watch": root / "reports" / "ACTIVE_WATCH.json",
         }
         self.patcher = patch.multiple(
             engine,
@@ -93,6 +109,7 @@ class _isolated_engine_paths:
             LOG_DIR=self.paths["logs"],
             SUPERVISOR_PID=self.paths["pid"],
             SUPERVISOR_LOG=self.paths["log"],
+            ACTIVE_WATCH=self.paths["active_watch"],
         )
         self.patcher.start()
         return self.paths

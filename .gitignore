@@ -7,7 +7,9 @@ data/*.sqlite
 data/*.sqlite-shm
 data/*.sqlite-wal
 data/app_visual_state.*
+data/supervisor.pid
 data/raw/
+reports/ACTIVE_WATCH.json
 *.log
 macos/BraiinsRatchet/.build/
 macos/build/

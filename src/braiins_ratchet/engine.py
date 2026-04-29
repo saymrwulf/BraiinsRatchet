@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
 import signal
@@ -8,6 +9,7 @@ import subprocess
 import sys
 
 from .config import REPO_ROOT
+from .experiments import ACTIVE_WATCH
 from .storage import DATA_DIR
 
 
@@ -42,6 +44,17 @@ def get_engine_status() -> EngineStatus:
             running=True,
             pid=discovered,
             detail=f"forever monitor engine is running as pid {discovered}",
+            log_path=str(SUPERVISOR_LOG.relative_to(REPO_ROOT)),
+        )
+
+    active_watch_pid = _active_watch_pid()
+    if active_watch_pid is not None and _pid_exists(active_watch_pid):
+        SUPERVISOR_PID.parent.mkdir(parents=True, exist_ok=True)
+        SUPERVISOR_PID.write_text(str(active_watch_pid), encoding="utf-8")
+        return EngineStatus(
+            running=True,
+            pid=active_watch_pid,
+            detail=f"forever monitor watch is running as pid {active_watch_pid}",
             log_path=str(SUPERVISOR_LOG.relative_to(REPO_ROOT)),
         )
 
@@ -150,7 +163,19 @@ def _clear_pid_file() -> None:
 
 def _pid_matches_supervisor(pid: int) -> bool:
     command = _command_for_pid(pid)
-    return command is not None and _is_supervisor_command(command)
+    if command is None:
+        return _pid_exists(pid)
+    return _is_supervisor_command(command)
+
+
+def _pid_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def _command_for_pid(pid: int) -> str | None:
@@ -191,6 +216,15 @@ def _find_supervisor_pid() -> int | None:
         if _is_supervisor_command(command):
             return pid
     return None
+
+
+def _active_watch_pid() -> int | None:
+    try:
+        payload = json.loads(ACTIVE_WATCH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    pid = payload.get("pid")
+    return pid if isinstance(pid, int) else None
 
 
 def _is_supervisor_command(command: str) -> bool:
