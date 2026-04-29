@@ -112,6 +112,17 @@ final class RatchetStore: ObservableObject {
         closePositionId = ""
     }
 
+    func writeRealitySnapshot(section: AppSection?) {
+        let reality = RenderedReality.make(
+            section: section ?? .deck,
+            appState: appState,
+            isWorking: isWorking,
+            operation: operation,
+            errorMessage: errorMessage
+        )
+        RealitySnapshotWriter.write(reality)
+    }
+
     private func run(label: String, arguments: [String], refreshAfterwards: Bool) async {
         operation = label
         rawTitle = label
@@ -135,11 +146,21 @@ struct FlightDeckApp: View {
         root
             .task {
                 await store.refresh()
+                store.writeRealitySnapshot(section: selection)
             }
             .onAppear {
                 withAnimation(.easeInOut(duration: 4.8).repeatForever(autoreverses: true)) {
                     pulse = true
                 }
+            }
+            .onChange(of: selection) { _, newValue in
+                store.writeRealitySnapshot(section: newValue)
+            }
+            .onChange(of: store.appState?.generatedAt) { _, _ in
+                store.writeRealitySnapshot(section: selection)
+            }
+            .onChange(of: store.operation) { _, _ in
+                store.writeRealitySnapshot(section: selection)
             }
     }
 
@@ -158,6 +179,17 @@ struct FlightDeckApp: View {
             selectedView
                 .safeAreaPadding(.horizontal, 30)
                 .safeAreaPadding(.vertical, 24)
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    RealityHUD(store: store, section: selection ?? .deck) {
+                        selection = .mirror
+                    }
+                    .padding(.trailing, 24)
+                    .padding(.bottom, 20)
+                }
+            }
         }
         .toolbar { toolbarContent }
         .searchable(text: $store.query, placement: .toolbar, prompt: "Search reports, prices, OCEAN, Braiins")
@@ -218,6 +250,8 @@ struct FlightDeckApp: View {
             ExposureView(store: store)
         case .vault:
             EvidenceVaultView(store: store)
+        case .mirror:
+            RealityMirrorView(store: store, section: selection ?? .mirror)
         }
     }
 }
@@ -229,6 +263,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case bidlab
     case exposure
     case vault
+    case mirror
 
     var id: String { rawValue }
 
@@ -240,6 +275,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .bidlab: "Bid Lab"
         case .exposure: "Exposure"
         case .vault: "Evidence"
+        case .mirror: "Reality Mirror"
         }
     }
 
@@ -251,6 +287,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .bidlab: "shadow order optics"
         case .exposure: "manual position lock"
         case .vault: "reports and raw state"
+        case .mirror: "BED: app sees itself"
         }
     }
 
@@ -262,6 +299,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .bidlab: "slider.horizontal.3"
         case .exposure: "lock.shield"
         case .vault: "archivebox"
+        case .mirror: "eye.square"
         }
     }
 }
@@ -1089,6 +1127,156 @@ struct EvidenceVaultView: View {
     }
 }
 
+struct RealityHUD: View {
+    @ObservedObject var store: RatchetStore
+    let section: AppSection
+    let openMirror: () -> Void
+
+    private var reality: RenderedReality {
+        RenderedReality.make(
+            section: section,
+            appState: store.appState,
+            isWorking: store.isWorking,
+            operation: store.operation,
+            errorMessage: store.errorMessage
+        )
+    }
+
+    var body: some View {
+        LiquidGlassSurface(tint: .white.opacity(0.10), cornerRadius: 24) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("Reality Mirror", systemImage: "eye")
+                        .font(.caption.weight(.heavy))
+                        .textCase(.uppercase)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Open") {
+                        openMirror()
+                    }
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+                }
+                Text(reality.decisionTitle)
+                    .font(.title2.weight(.black))
+                    .foregroundStyle(reality.decisionTint)
+                Text(reality.currentInstruction)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                Text("writes data/app_visual_state.md")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .frame(width: 330, alignment: .leading)
+        }
+        .accessibilityLabel("Reality Mirror heads-up display, current decision \(reality.decisionTitle)")
+    }
+}
+
+struct RealityMirrorView: View {
+    @ObservedObject var store: RatchetStore
+    let section: AppSection
+
+    private var reality: RenderedReality {
+        RenderedReality.make(
+            section: section,
+            appState: store.appState,
+            isWorking: store.isWorking,
+            operation: store.operation,
+            errorMessage: store.errorMessage
+        )
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                SectionHeader("Reality Mirror", "BED: Backstage Evidence Deck. This is the app reflecting the concrete state it is rendering now, not generic advice.")
+
+                HStack(alignment: .top, spacing: 18) {
+                    LiquidGlassSurface(tint: reality.decisionTint.opacity(0.22), cornerRadius: 38) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Label("What I am showing", systemImage: "eye.fill")
+                                .font(.title2.weight(.black))
+                            Text(reality.decisionTitle)
+                                .font(.system(size: 56, weight: .black, design: .rounded))
+                                .foregroundStyle(reality.decisionTint)
+                            Text(reality.decisionExplanation)
+                                .font(.title3.weight(.semibold))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(reality.currentInstruction)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(24)
+                    }
+
+                    LiquidGlassSurface(tint: .cyan.opacity(0.16), cornerRadius: 38) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Label("Snapshot artifact", systemImage: "doc.text.magnifyingglass")
+                                .font(.title2.weight(.black))
+                            Text("The SwiftUI app writes exactly this semantic view state into the repo.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Button {
+                                store.writeRealitySnapshot(section: section)
+                            } label: {
+                                Label("Write Snapshot Now", systemImage: "square.and.arrow.down")
+                            }
+                            .buttonStyle(.glassProminent)
+                            .tint(.cyan)
+                            Text("data/app_visual_state.md\n data/app_visual_state.json")
+                                .font(.body.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        .padding(24)
+                    }
+                }
+
+                LiquidGlassSurface(tint: .white.opacity(0.08), cornerRadius: 34) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Label("Current visible facts", systemImage: "list.bullet.rectangle")
+                            .font(.title2.weight(.black))
+                        ValueGrid(rows: reality.factGridRows)
+                    }
+                    .padding(22)
+                }
+
+                LiquidGlassSurface(tint: .green.opacity(0.12), cornerRadius: 34) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Label("Buttons I believe are visible", systemImage: "cursorarrow.click.2")
+                            .font(.title2.weight(.black))
+                        ForEach(reality.visibleButtons, id: \.self) { button in
+                            Text(button)
+                                .font(.body.monospaced())
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .padding(22)
+                }
+
+                LiquidGlassSurface(tint: .orange.opacity(0.12), cornerRadius: 34) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Label("Operator truth", systemImage: "exclamationmark.shield")
+                            .font(.title2.weight(.black))
+                        ForEach(reality.operatorTruths, id: \.self) { truth in
+                            Text(truth)
+                                .font(.callout)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(22)
+                }
+            }
+        }
+        .onAppear {
+            store.writeRealitySnapshot(section: section)
+        }
+    }
+}
+
 struct SectionHeader: View {
     let title: String
     let subtitle: String
@@ -1320,6 +1508,305 @@ enum ControlOwner {
         case .busy: "gearshape.2"
         case .loading: "questionmark.circle"
         }
+    }
+}
+
+struct RealityRow: Codable, Hashable {
+    let label: String
+    let value: String
+    let unit: String
+}
+
+struct RenderedReality: Codable {
+    let snapshotGeneratedAt: String
+    let source: String
+    let visibleSection: String
+    let visibleSectionSubtitle: String
+    let decisionTitle: String
+    let decisionExplanation: String
+    let controlTitle: String
+    let controlDetail: String
+    let nextTitle: String
+    let nextDetail: String
+    let currentInstruction: String
+    let engineRunning: Bool
+    let engineDetail: String
+    let operation: String
+    let errorMessage: String
+    let latestStrategyAction: String
+    let latestReport: String
+    let activeWatch: String
+    let completedWatch: String
+    let activeManualExposure: String
+    let braiinsFreshness: String
+    let latestOceanSample: String
+    let latestBraiinsSample: String
+    let instrumentRows: [RealityRow]
+    let visibleButtons: [String]
+    let operatorTruths: [String]
+
+    var factRows: [RealityRow] {
+        [
+            RealityRow(label: "visible section", value: visibleSection, unit: "screen"),
+            RealityRow(label: "decision", value: decisionTitle, unit: "giant word"),
+            RealityRow(label: "control", value: controlTitle, unit: "owner"),
+            RealityRow(label: "next", value: nextTitle, unit: "action"),
+            RealityRow(label: "engine", value: engineRunning ? "running" : "stopped", unit: "state"),
+            RealityRow(label: "strategy", value: latestStrategyAction, unit: "proposal"),
+            RealityRow(label: "braiins", value: braiinsFreshness, unit: "freshness"),
+            RealityRow(label: "manual exposure", value: activeManualExposure, unit: "blocker"),
+        ] + instrumentRows
+    }
+
+    var factGridRows: [(String, String, String)] {
+        factRows.map { ($0.label, $0.value, $0.unit) }
+    }
+
+    var decisionTint: Color {
+        switch decisionTitle {
+        case "ENGINE LIVE", "REFRESH", "WATCH", "REVIEW":
+            .green
+        case "WORKING", "HOLD", "WAIT", "COOLDOWN":
+            .orange
+        default:
+            .secondary
+        }
+    }
+
+    static func make(
+        section: AppSection,
+        appState: AppStatePayload?,
+        isWorking: Bool,
+        operation: String?,
+        errorMessage: String?
+    ) -> RenderedReality {
+        let decision = Decision.from(appState, isWorking: isWorking)
+        let control = ControlOwner.from(appState, isWorking: isWorking)
+        let next = nextAction(appState)
+        let latest = appState?.latest
+        let operatorState = appState?.operatorState
+        let engineStatus = appState?.engineStatus
+        let activePositions = operatorState?.activeManualPositions ?? []
+        let completedWatch = operatorState?.completedWatch
+        let buttons = visibleButtons(section: section, appState: appState, isWorking: isWorking)
+        let truths = operatorTruths(
+            decision: decision,
+            appState: appState,
+            activePositions: activePositions,
+            completedWatch: completedWatch
+        )
+
+        return RenderedReality(
+            snapshotGeneratedAt: ISO8601DateFormatter().string(from: Date()),
+            source: "SwiftUI rendered semantic state; this is not a screenshot or generic documentation.",
+            visibleSection: section.title,
+            visibleSectionSubtitle: section.subtitle,
+            decisionTitle: decision.title,
+            decisionExplanation: decision.explanation,
+            controlTitle: control.title,
+            controlDetail: control.detail,
+            nextTitle: next.title,
+            nextDetail: next.detail,
+            currentInstruction: next.instruction,
+            engineRunning: engineStatus?.running == true,
+            engineDetail: engineStatus?.detail ?? "engine state not loaded",
+            operation: operation ?? "none",
+            errorMessage: errorMessage ?? "none",
+            latestStrategyAction: operatorState?.action ?? "none",
+            latestReport: operatorState?.latestReport ?? "none",
+            activeWatch: operatorState?.activeWatch ?? "none",
+            completedWatch: completedWatch.map { "\($0.reportPath), remaining \($0.remainingMinutes)m, earliest \($0.earliestActionLocal)" } ?? "none",
+            activeManualExposure: activePositions.isEmpty ? "none" : activePositions.joined(separator: "; "),
+            braiinsFreshness: freshnessText(operatorState),
+            latestOceanSample: operatorState?.latestOceanTimestamp ?? "none",
+            latestBraiinsSample: operatorState?.latestMarketTimestamp ?? "none",
+            instrumentRows: [
+                RealityRow(label: "braiins price", value: marketValue(latest, "fillable_price_btc_per_eh_day", fallback: marketValue(latest, "best_ask_btc_per_eh_day")), unit: "BTC/EH/day"),
+                RealityRow(label: "ocean hashrate", value: oceanValue(latest, "pool_hashrate_eh_s"), unit: "EH/s"),
+                RealityRow(label: "pool window", value: oceanValue(latest, "avg_block_time_hours"), unit: "h/block"),
+                RealityRow(label: "expected net", value: sats(proposalValue(latest, "expected_net_btc")), unit: "model"),
+            ],
+            visibleButtons: buttons,
+            operatorTruths: truths
+        )
+    }
+
+    private static func nextAction(_ appState: AppStatePayload?) -> (title: String, detail: String, instruction: String) {
+        guard let state = appState else {
+            return ("Load state", "Reading durable SQLite state.", "Wait for the app-state load to finish.")
+        }
+        if state.engineStatus.running {
+            return (
+                "Engine owns it",
+                "No babysitting. The background engine waits, samples, watches, and writes evidence.",
+                "Do nothing unless you intentionally want to stop the engine or record manual exposure."
+            )
+        }
+        if state.operatorState.activeWatch != nil {
+            return (
+                "Wait for watch",
+                "A passive watch is already running.",
+                "Do not start another watch. Wait for the current run report."
+            )
+        }
+        if let watch = state.operatorState.completedWatch {
+            return (
+                "Wait \(watch.remainingMinutes)m",
+                "Earliest useful action: \(watch.earliestActionLocal).",
+                "Cooldown is active. Do not repeat the same experiment yet."
+            )
+        }
+        if !state.operatorState.activeManualPositions.isEmpty {
+            return (
+                "Hold exposure",
+                "A manually recorded Braiins position blocks new experiments.",
+                "Supervise the real position. Close it only when it is truly finished."
+            )
+        }
+        let step = state.automationPlan.steps.first ?? "No passive action is useful right now."
+        return (state.automationPlan.title, step, step)
+    }
+
+    private static func visibleButtons(section: AppSection, appState: AppStatePayload?, isWorking: Bool) -> [String] {
+        var buttons = ["Toolbar: Refresh"]
+        if appState?.engineStatus.running == true {
+            buttons.append("Toolbar: Stop Engine")
+        } else {
+            buttons.append("Toolbar: Start Engine")
+        }
+        switch section {
+        case .deck:
+            buttons.append(contentsOf: ["Flight Deck: Start Forever Engine", "Flight Deck: Stop", "Flight Deck: One Sample"])
+        case .exposure:
+            buttons.append(contentsOf: ["Exposure: Record Exposure", "Exposure: Close Exposure"])
+        case .vault:
+            buttons.append(contentsOf: ["Evidence: Cockpit", "Evidence: Report", "Evidence: Ledger"])
+        case .mirror:
+            buttons.append("Reality Mirror: Write Snapshot Now")
+        default:
+            break
+        }
+        if isWorking {
+            buttons.append("State: some buttons are disabled because an operation is running")
+        }
+        return buttons
+    }
+
+    private static func operatorTruths(
+        decision: Decision,
+        appState: AppStatePayload?,
+        activePositions: [String],
+        completedWatch: CompletedWatchPayload?
+    ) -> [String] {
+        if appState == nil {
+            return ["The app has not loaded structured backend state yet."]
+        }
+        if !activePositions.isEmpty {
+            return [
+                "Real manual exposure is recorded.",
+                "New watch experiments should remain blocked until the exposure is closed."
+            ]
+        }
+        if appState?.engineStatus.running == true {
+            return [
+                "The forever engine owns passive research.",
+                "The safest operator workload is zero unless you need to record real exposure."
+            ]
+        }
+        if let completedWatch {
+            return [
+                "A watch already produced evidence.",
+                "Earliest useful next action is \(completedWatch.earliestActionLocal)."
+            ]
+        }
+        switch decision {
+        case .watch:
+            return ["A passive watch or the forever engine is the current research action; no BTC is spent by the app."]
+        case .review:
+            return ["Manual review is required before any Braiins action; the app still cannot spend BTC."]
+        case .observe:
+            return ["No useful action window is visible; doing nothing is the intended action."]
+        default:
+            return [decision.explanation]
+        }
+    }
+
+    private static func freshnessText(_ state: OperatorStatePayload?) -> String {
+        guard let minutes = state?.freshnessMinutes else { return "unknown" }
+        return minutes <= 30 ? "fresh (\(minutes)m)" : "stale (\(minutes)m)"
+    }
+
+    private static func marketValue(_ latest: LatestPayload?, _ key: String, fallback: String = "n/a") -> String {
+        latest?.market?[key]?.description ?? fallback
+    }
+
+    private static func oceanValue(_ latest: LatestPayload?, _ key: String) -> String {
+        latest?.ocean?[key]?.description ?? "n/a"
+    }
+
+    private static func proposalValue(_ latest: LatestPayload?, _ key: String) -> String {
+        latest?.proposal?[key]?.description ?? "n/a"
+    }
+}
+
+enum RealitySnapshotWriter {
+    static func write(_ reality: RenderedReality) {
+        guard let repoRoot = RatchetProcess.repoRootURL() else { return }
+        let dataDir = repoRoot.appendingPathComponent("data", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let jsonData = try encoder.encode(reality)
+            try jsonData.write(to: dataDir.appendingPathComponent("app_visual_state.json"), options: .atomic)
+            try renderMarkdown(reality).write(
+                to: dataDir.appendingPathComponent("app_visual_state.md"),
+                atomically: true,
+                encoding: .utf8
+            )
+        } catch {
+            // This is diagnostic output only. UI operation must never fail because the mirror file cannot be written.
+        }
+    }
+
+    private static func renderMarkdown(_ reality: RenderedReality) -> String {
+        var lines = [
+            "# App Visual State",
+            "",
+            "This file is written by the SwiftUI app. It records the app's semantic rendered state, not generic documentation.",
+            "",
+            "- snapshot_generated_at: \(reality.snapshotGeneratedAt)",
+            "- visible_section: \(reality.visibleSection)",
+            "- decision: \(reality.decisionTitle)",
+            "- decision_explanation: \(reality.decisionExplanation)",
+            "- control: \(reality.controlTitle)",
+            "- control_detail: \(reality.controlDetail)",
+            "- next: \(reality.nextTitle)",
+            "- next_detail: \(reality.nextDetail)",
+            "- current_instruction: \(reality.currentInstruction)",
+            "- engine_running: \(reality.engineRunning ? "yes" : "no")",
+            "- engine_detail: \(reality.engineDetail)",
+            "- operation: \(reality.operation)",
+            "- error_message: \(reality.errorMessage)",
+            "- latest_strategy_action: \(reality.latestStrategyAction)",
+            "- braiins_freshness: \(reality.braiinsFreshness)",
+            "- latest_ocean_sample: \(reality.latestOceanSample)",
+            "- latest_braiins_sample: \(reality.latestBraiinsSample)",
+            "- latest_report: \(reality.latestReport)",
+            "- active_watch: \(reality.activeWatch)",
+            "- completed_watch: \(reality.completedWatch)",
+            "- active_manual_exposure: \(reality.activeManualExposure)",
+            "",
+            "## Instruments",
+            "",
+        ]
+        lines.append(contentsOf: reality.instrumentRows.map { "- \($0.label): \($0.value) \($0.unit)" })
+        lines.append(contentsOf: ["", "## Visible Buttons", ""])
+        lines.append(contentsOf: reality.visibleButtons.map { "- \($0)" })
+        lines.append(contentsOf: ["", "## Operator Truths", ""])
+        lines.append(contentsOf: reality.operatorTruths.map { "- \($0)" })
+        lines.append("")
+        return lines.joined(separator: "\n")
     }
 }
 
@@ -1561,6 +2048,10 @@ enum AppIconFactory {
 }
 
 enum RatchetProcess {
+    static func repoRootURL() -> URL? {
+        findRepoRoot()
+    }
+
     static func loadAppState() async -> AppStateLoadResult {
         await Task.detached {
             guard let repoRoot = findRepoRoot() else {

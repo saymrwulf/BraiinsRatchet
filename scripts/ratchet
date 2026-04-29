@@ -16,6 +16,7 @@ Commands:
   supervise          Run the durable forever lifecycle supervisor.
   engine             Start/stop/status for the background monitor engine.
   app                Build and open the native macOS app.
+  mirror             Print the app's latest self-written visual-state snapshot.
   position           Record/list/close manually executed Braiins exposure.
   report             Print the latest stored report without fetching new data.
   app-state          Print structured JSON for the native macOS app.
@@ -36,6 +37,7 @@ Examples:
   ./scripts/ratchet supervise
   ./scripts/ratchet engine status
   ./scripts/ratchet app
+  ./scripts/ratchet mirror
   ./scripts/ratchet position list
   ./scripts/ratchet report
   ./scripts/ratchet experiments
@@ -142,6 +144,17 @@ cmd_app() {
   open "$app_path"
 }
 
+cmd_mirror() {
+  local path="$ROOT_DIR/data/app_visual_state.md"
+  if [[ ! -f "$path" ]]; then
+    echo "No app visual-state snapshot exists yet."
+    echo "Open the native app with: ./scripts/ratchet app"
+    echo "Then refresh or open the Reality Mirror tab."
+    return 0
+  fi
+  cat "$path"
+}
+
 cmd_position() {
   run_python -m braiins_ratchet.cli position "$@"
 }
@@ -194,6 +207,7 @@ main() {
     supervise|daemon) cmd_supervise "$@" ;;
     engine) cmd_engine "$@" ;;
     app|mac-app) cmd_app "$@" ;;
+    mirror|reality) cmd_mirror "$@" ;;
     position|positions) cmd_position "$@" ;;
     report) cmd_report "$@" ;;
     app-state) cmd_app_state "$@" ;;

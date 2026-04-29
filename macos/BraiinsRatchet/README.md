@@ -22,6 +22,7 @@ This builds `macos/build/Braiins Ratchet.app`, closes any stale `BraiinsRatchetM
 - Forever Engine controls for the monitor-only background lifecycle.
 - Manual exposure recording and closing controls.
 - Evidence view for raw artifacts and backend diagnostics.
+- Reality Mirror BED layer plus `data/app_visual_state.md/json` self-reflection snapshots.
 - Monitor-only. It never places Braiins orders.
 
 ## Product Direction

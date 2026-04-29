@@ -76,6 +76,20 @@ The app is organized as:
 4. `Bid Lab`: shadow order, expected net, breakeven, and loss boundary.
 5. `Exposure`: record or close manually executed Braiins exposure.
 6. `Evidence`: raw cockpit, report, and ledger artifacts for diagnostics.
+7. `Reality Mirror`: self-reflective BED view that shows what the app believes it is rendering right now.
+
+The small `Reality Mirror` HUD writes the current visual/operator truth to:
+
+```text
+data/app_visual_state.md
+data/app_visual_state.json
+```
+
+If you ask for help, this file is the fastest way to show the exact app state instead of describing it from memory:
+
+```bash
+./scripts/ratchet mirror
+```
 
 ## Research Pathway
 
@@ -140,6 +154,7 @@ Use these only if the native app cannot be opened or you are debugging:
 ./scripts/ratchet position list
 ./scripts/ratchet report
 ./scripts/ratchet experiments
+./scripts/ratchet mirror
 ./scripts/ratchet guide
 ./scripts/ratchet operator-guide
 ```

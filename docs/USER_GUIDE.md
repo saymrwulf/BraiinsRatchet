@@ -73,8 +73,43 @@ The normal app tabs are:
 4. `Bid Lab`: shadow order, breakeven, expected net, and loss budget.
 5. `Exposure`: manual Braiins position recorder.
 6. `Evidence`: raw reports and diagnostic text.
+7. `Reality Mirror`: the app's self-reflective BED view.
 
 If you are unsure, stay on `Flight Deck`.
+
+## Reality Mirror
+
+The `Reality Mirror` is the app looking at itself.
+
+BED means `Backstage Evidence Deck`.
+
+It exists because generic advice is not enough. The app writes what it believes it is rendering right now:
+
+1. Visible section.
+2. Giant decision word.
+3. Control owner.
+4. Next action.
+5. Engine state.
+6. Strategy action.
+7. Braiins freshness.
+8. Active watch, cooldown, or manual exposure.
+9. Buttons it believes are visible.
+10. Operator truths for the current state.
+
+The files are:
+
+```text
+data/app_visual_state.md
+data/app_visual_state.json
+```
+
+If you ask for help, run:
+
+```bash
+./scripts/ratchet mirror
+```
+
+That prints the latest self-written visual state, so the helper can reason about what is actually on your app surface.
 
 ## Flight Deck Reading Order
 
@@ -333,8 +368,9 @@ Use this order:
 2. `Ratchet`: where the experiment is in the loop.
 3. `Bid Lab`: why the current proposal exists.
 4. `Exposure`: whether real money blocks new experiments.
-5. `Evidence`: raw report and ledger.
-6. `docs/OPERATOR_GUIDE.md`: installation, recovery, migration, and diagnostics.
+5. `Reality Mirror`: what the app believes it is showing right now.
+6. `Evidence`: raw report and ledger.
+7. `docs/OPERATOR_GUIDE.md`: installation, recovery, migration, and diagnostics.
 
 ## Glossary
 

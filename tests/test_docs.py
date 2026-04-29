@@ -19,6 +19,9 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("Immediate", text)
         self.assertIn("Midterm", text)
         self.assertIn("Longterm", text)
+        self.assertIn("Reality Mirror", text)
+        self.assertIn("Backstage Evidence Deck", text)
+        self.assertIn("data/app_visual_state.md", text)
         self.assertIn("Potential Findings", text)
         self.assertIn("manual_canary", text)
         self.assertIn("manual_bid", text)
@@ -37,6 +40,8 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("SQLite durable state", text)
         self.assertIn("Switching To Another macOS Host", text)
         self.assertIn("State Recovery", text)
+        self.assertIn("visual self-reflection layer", text)
+        self.assertIn("data/app_visual_state.json", text)
         self.assertIn("data/ratchet.sqlite*", text)
         self.assertIn("reports/EXPERIMENT_LOG.md", text)
         self.assertIn("git clone -b master", text)
@@ -51,10 +56,13 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("docs/OPERATOR_GUIDE.md", readme)
         self.assertIn("./scripts/ratchet guide", readme)
         self.assertIn("./scripts/ratchet operator-guide", readme)
+        self.assertIn("./scripts/ratchet mirror", readme)
         self.assertIn("./scripts/ratchet guide", start_here)
         self.assertIn("./scripts/ratchet operator-guide", start_here)
+        self.assertIn("./scripts/ratchet mirror", start_here)
         self.assertIn("guide|user-guide|explain", wrapper)
         self.assertIn("operator-guide|operator", wrapper)
+        self.assertIn("mirror|reality", wrapper)
 
 
 if __name__ == "__main__":

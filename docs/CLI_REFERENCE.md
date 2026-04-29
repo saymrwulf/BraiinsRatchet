@@ -17,6 +17,8 @@ Use `./scripts/ratchet guide` for the user-facing operating story.
 
 Use `./scripts/ratchet operator-guide` for architecture, installation, migration, backup, recovery, and diagnostics.
 
+Use `./scripts/ratchet mirror` to print the native app's latest self-written visual-state snapshot from `data/app_visual_state.md`.
+
 The raw Python CLI is documented below for debugging and development.
 
 All raw commands should be run from the repository root.
@@ -49,6 +51,16 @@ These are wrapper commands, not raw Python subcommands:
 `guide`, `user-guide`, and `explain` print `docs/USER_GUIDE.md`.
 
 `operator-guide` prints `docs/OPERATOR_GUIDE.md`.
+
+## Wrapper Reality Mirror Command
+
+This is a wrapper command, not a raw Python subcommand:
+
+```bash
+./scripts/ratchet mirror
+```
+
+It prints `data/app_visual_state.md`, which is written by the SwiftUI app whenever it refreshes state or changes visible sections. If no snapshot exists yet, open the app with `./scripts/ratchet app` and refresh or open `Reality Mirror`.
 
 ## `pipeline`
 

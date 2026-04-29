@@ -43,7 +43,8 @@ The current stack is:
 6. SQLite durable state at `data/ratchet.sqlite`.
 7. Markdown evidence reports under `reports/`.
 8. Bash launchers in `scripts/`.
-9. Git and GitHub on branch `master`.
+9. SwiftUI self-reflection snapshots at `data/app_visual_state.md` and `data/app_visual_state.json`.
+10. Git and GitHub on branch `master`.
 
 ### Runtime Layers
 
@@ -70,6 +71,10 @@ Layer 5 is research evidence.
 Layer 6 is the background engine.
 
 `src/braiins_ratchet/engine.py` starts a detached monitor-only supervisor, writes `data/supervisor.pid`, and logs to `logs/supervisor.log`.
+
+Layer 7 is the visual self-reflection layer.
+
+The SwiftUI app renders a `Reality Mirror` HUD and tab. It writes the semantic state it believes it is showing to `data/app_visual_state.md` and `data/app_visual_state.json`. This is not screenshot OCR; it is the app's own rendered-state ledger.
 
 ### Data Flow
 
@@ -105,8 +110,10 @@ Operational files:
 1. `data/supervisor.pid`: PID for the background engine.
 2. `logs/supervisor.log`: background engine output.
 3. `reports/ACTIVE_WATCH.json`: marker for a running watch.
-4. `.venv`: local Python environment, disposable.
-5. `macos/build/Braiins Ratchet.app`: generated app bundle, disposable.
+4. `data/app_visual_state.md`: latest human-readable visual self-reflection snapshot.
+5. `data/app_visual_state.json`: latest machine-readable visual self-reflection snapshot.
+6. `.venv`: local Python environment, disposable.
+7. `macos/build/Braiins Ratchet.app`: generated app bundle, disposable.
 
 Source files:
 
@@ -557,6 +564,12 @@ Check app state:
 
 ```bash
 ./scripts/ratchet app-state
+```
+
+Check what the visible app surface believes it is showing:
+
+```bash
+./scripts/ratchet mirror
 ```
 
 Check latest plain report:

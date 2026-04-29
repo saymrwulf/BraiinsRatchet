@@ -46,6 +46,19 @@ This builds `macos/build/Braiins Ratchet.app`, closes any stale `BraiinsRatchetM
 
 The app is a native Tahoe Flight Deck: animated hashfield background, real SwiftUI Liquid Glass controls, Hashflow, Ratchet, Bid Lab, Exposure, and Evidence. The design rationale is in `docs/APP_DESIGN_RESEARCH.md`.
 
+The app also has a `Reality Mirror` self-reflection layer. It writes the exact semantic state the SwiftUI app believes it is showing to:
+
+```text
+data/app_visual_state.md
+data/app_visual_state.json
+```
+
+Print the latest mirror snapshot:
+
+```bash
+./scripts/ratchet mirror
+```
+
 Advanced fallback for a 6-hour CLI monitoring session:
 
 ```bash
