@@ -506,6 +506,10 @@ struct EngineConsole: View {
                         Text(store.appState?.engineStatus.detail ?? "Loading engine state")
                             .font(.callout)
                             .foregroundStyle(.secondary)
+                        Text(engineContext)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
                     }
                     Spacer()
                     EngineBeacon(running: store.appState?.engineStatus.running == true)
@@ -515,7 +519,7 @@ struct EngineConsole: View {
                     Button {
                         Task { await store.startEngine() }
                     } label: {
-                        Label("Start Forever Engine", systemImage: "dot.radiowaves.left.and.right")
+                        Label(startEngineTitle, systemImage: "dot.radiowaves.left.and.right")
                     }
                     .buttonStyle(.glassProminent)
                     .tint(.green)
@@ -541,6 +545,29 @@ struct EngineConsole: View {
             }
             .padding(20)
         }
+    }
+
+    private var startEngineTitle: String {
+        guard let state = store.appState else { return "Start Forever Engine" }
+        if state.operatorState.completedWatch != nil { return "Resume Forever Engine" }
+        if !state.operatorState.runningRuns.isEmpty { return "Recover Forever Engine" }
+        return "Start Forever Engine"
+    }
+
+    private var engineContext: String {
+        guard let state = store.appState else {
+            return "Loading durable research state from SQLite."
+        }
+        if state.engineStatus.running {
+            return "Forever means watch, report, cooldown, then repeat until you stop it."
+        }
+        if let watch = state.operatorState.completedWatch {
+            return "Cooldown is active until \(watch.earliestActionLocal). Resume means wait, then continue automatically."
+        }
+        if !state.operatorState.runningRuns.isEmpty {
+            return "A previous run marker exists without a live engine. Refresh/recover before starting new research."
+        }
+        return "Stopped. Start begins the always-on monitor-only supervisor."
     }
 }
 
@@ -1774,7 +1801,8 @@ struct RenderedReality: Codable {
         }
         switch section {
         case .deck:
-            buttons.append(contentsOf: ["Flight Deck: Start Forever Engine", "Flight Deck: Stop", "Flight Deck: One Sample"])
+            let deckStart = appState?.operatorState.completedWatch == nil ? "Flight Deck: Start Forever Engine" : "Flight Deck: Resume Forever Engine"
+            buttons.append(contentsOf: [deckStart, "Flight Deck: Stop", "Flight Deck: One Sample"])
         case .exposure:
             buttons.append(contentsOf: ["Exposure: Record Exposure", "Exposure: Close Exposure"])
         case .vault:
