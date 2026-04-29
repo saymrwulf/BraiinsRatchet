@@ -187,7 +187,13 @@ def run_supervisor(config: AppConfig, *, once: bool = False) -> int:
                 "watch_completed",
                 {"run_id": run_id, "next_action_utc": next_action.isoformat(timespec="seconds")},
             )
-            print(build_operator_cockpit(conn))
+            print(
+                build_operator_cockpit(
+                    conn,
+                    engine_running=True,
+                    engine_detail="forever monitor engine is running inside this supervisor process",
+                )
+            )
         if once:
             return 0
 

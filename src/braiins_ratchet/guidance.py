@@ -84,7 +84,12 @@ def get_operator_state(conn) -> OperatorState:
     )
 
 
-def build_operator_cockpit(conn) -> str:
+def build_operator_cockpit(
+    conn,
+    *,
+    engine_running: bool = False,
+    engine_detail: str | None = None,
+) -> str:
     state = get_operator_state(conn)
 
     lines = [
@@ -100,6 +105,7 @@ def build_operator_cockpit(conn) -> str:
         f"  Experiment ledger: {EXPERIMENT_LOG.relative_to(REPORTS_DIR.parent) if EXPERIMENT_LOG.exists() else 'none yet'}",
         f"  Active watch: {state.active_watch or 'none detected'}",
         f"  Active manual exposure: {_manual_exposure_text(state.active_manual_positions)}",
+        f"  Forever engine: {_engine_text(engine_running, engine_detail)}",
         f"  Research stage: {_research_stage(state.active_watch, state.completed_watch)}",
     ]
 
@@ -122,6 +128,7 @@ def build_operator_cockpit(conn) -> str:
             has_market=state.has_market,
             is_fresh=state.is_fresh,
             action=state.action,
+            engine_running=engine_running,
         )
     )
     lines.extend(["", "Ratchet Pathway Forecast"])
@@ -134,6 +141,7 @@ def build_operator_cockpit(conn) -> str:
             has_market=state.has_market,
             is_fresh=state.is_fresh,
             action=state.action,
+            engine_running=engine_running,
         )
     )
     lines.extend(["", "How To Interpret The Current Action"])
@@ -169,6 +177,7 @@ def _do_this_now(
     has_market: bool,
     is_fresh: bool,
     action: str | None,
+    engine_running: bool = False,
 ) -> list[str]:
     if active_watch:
         return [
@@ -187,6 +196,14 @@ def _do_this_now(
             "    ./scripts/ratchet supervise --status",
             "  When the Braiins position is really finished, close it with:",
             "    ./scripts/ratchet position close POSITION_ID",
+        ]
+
+    if engine_running:
+        return [
+            "  DO NOTHING.",
+            "  The forever engine is running and owns passive research.",
+            "  It will wait through cooldown, start the next passive watch when allowed, write evidence, then repeat.",
+            "  Do not start another watch or one-shot command unless you intentionally stop the engine first.",
         ]
 
     if completed_watch and action == "manual_canary":
@@ -251,6 +268,7 @@ def _pathway_forecast(
     has_market: bool,
     is_fresh: bool,
     action: str | None,
+    engine_running: bool = False,
 ) -> list[str]:
     if active_watch:
         return [
@@ -266,6 +284,14 @@ def _pathway_forecast(
             "  Immediate, certain: supervise the active manual exposure; workload is observation only.",
             "  Midterm, likely: close the position manually when Braiins/OCEAN state confirms it is done.",
             "  Longterm, possible: resume passive ratchet experiments only after exposure is closed.",
+        ]
+
+    if engine_running:
+        return [
+            "  Planning probabilities are workflow estimates, not profit probabilities.",
+            "  Immediate, certain: workload is zero; the engine owns the next wait/watch/report cycle.",
+            "  Midterm, likely: the app will show cooldown or live watch progress without terminal babysitting.",
+            "  Longterm, likely: the engine keeps repeating passive research stages until you stop it.",
         ]
 
     if completed_watch and action == "manual_canary":
@@ -373,6 +399,12 @@ def _manual_exposure_text(positions: list[str]) -> str:
     if not positions:
         return "none recorded"
     return "; ".join(positions)
+
+
+def _engine_text(engine_running: bool, engine_detail: str | None) -> str:
+    if engine_running:
+        return engine_detail or "running"
+    return engine_detail or "not running"
 
 
 def _recent_completed_watch(latest_report: str | None, latest_market_timestamp: str | None) -> CompletedWatch | None:

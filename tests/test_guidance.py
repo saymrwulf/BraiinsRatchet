@@ -109,6 +109,24 @@ class GuidanceTests(unittest.TestCase):
         self.assertIn("Do not start another identical watch now.", text)
         self.assertIn("./scripts/ratchet once", text)
 
+    def test_running_engine_owns_passive_research(self) -> None:
+        lines = _do_this_now(
+            active_watch=None,
+            active_manual_positions=[],
+            completed_watch=_completed_watch(age_minutes=4),
+            has_ocean=True,
+            has_market=True,
+            is_fresh=True,
+            action="manual_canary",
+            engine_running=True,
+        )
+
+        text = "\n".join(lines)
+
+        self.assertIn("DO NOTHING.", text)
+        self.assertIn("forever engine is running", text)
+        self.assertIn("wait through cooldown", text)
+
     def test_recent_completed_watch_forecast_enters_cooldown(self) -> None:
         lines = _pathway_forecast(
             active_watch=None,

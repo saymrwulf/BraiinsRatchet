@@ -169,7 +169,14 @@ def cmd_next(_: argparse.Namespace) -> int:
     with connect() as conn:
         init_db(conn)
         recover_stale_active_watch(conn)
-        print(build_operator_cockpit(conn))
+        engine_status = get_engine_status()
+        print(
+            build_operator_cockpit(
+                conn,
+                engine_running=engine_status.running,
+                engine_detail=engine_status.detail,
+            )
+        )
     return 0
 
 
@@ -180,13 +187,18 @@ def cmd_app_state(_: argparse.Namespace) -> int:
         recover_stale_active_watch(conn)
         operator_state = get_operator_state(conn)
         automation_plan = build_automation_plan(conn)
+        engine_status = get_engine_status()
         payload = {
             "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "operator_state": asdict(operator_state),
             "automation_plan": asdict(automation_plan),
-            "engine_status": asdict(get_engine_status()),
+            "engine_status": asdict(engine_status),
             "config": asdict(config),
-            "cockpit": build_operator_cockpit(conn),
+            "cockpit": build_operator_cockpit(
+                conn,
+                engine_running=engine_status.running,
+                engine_detail=engine_status.detail,
+            ),
             "latest": {
                 "ocean": _object_dict(latest_ocean_snapshot(conn)),
                 "market": _object_dict(latest_market_snapshot(conn)),
