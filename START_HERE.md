@@ -91,6 +91,8 @@ If you ask for help, this file is the fastest way to show the exact app state in
 ./scripts/ratchet mirror
 ```
 
+When a watch is running, `Flight Deck` shows a running-experiment progress panel with the run id, countdown, approximate cycle count, progress bar, and local finish time. The countdown updates every second; backend state refreshes roughly every 30 seconds.
+
 ## Research Pathway
 
 The app has three time horizons:

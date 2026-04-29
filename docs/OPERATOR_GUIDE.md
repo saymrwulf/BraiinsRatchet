@@ -76,6 +76,8 @@ Layer 7 is the visual self-reflection layer.
 
 The SwiftUI app renders a `Reality Mirror` HUD and tab. It writes the semantic state it believes it is showing to `data/app_visual_state.md` and `data/app_visual_state.json`. This is not screenshot OCR; it is the app's own rendered-state ledger.
 
+During active watches, the backend exposes `active_watch_details` through `app-state`: run id, PID, start time, planned cycles, interval, elapsed seconds, remaining seconds, progress percent, next-cycle ETA, and estimated finish time. The SwiftUI Flight Deck renders this as a live progress panel and refreshes backend state roughly every 30 seconds.
+
 ### Data Flow
 
 Normal data flow:

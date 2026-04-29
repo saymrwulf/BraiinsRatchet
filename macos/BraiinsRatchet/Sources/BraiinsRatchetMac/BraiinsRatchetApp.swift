@@ -147,6 +147,11 @@ struct FlightDeckApp: View {
             .task {
                 await store.refresh()
                 store.writeRealitySnapshot(section: selection)
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 30_000_000_000)
+                    await store.refresh()
+                    store.writeRealitySnapshot(section: selection)
+                }
             }
             .onAppear {
                 withAnimation(.easeInOut(duration: 4.8).repeatForever(autoreverses: true)) {
@@ -394,6 +399,10 @@ struct FlightDeckView: View {
                     }
 
                     InstrumentRibbon(appState: store.appState)
+
+                    if let activeWatch = store.appState?.operatorState.activeWatchDetails {
+                        ActiveWatchProgressPanel(activeWatch: activeWatch)
+                    }
 
                     EngineConsole(store: store)
                 }
@@ -734,6 +743,86 @@ struct InstrumentChip: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular.tint(color.opacity(0.18)).interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+}
+
+struct ActiveWatchProgressPanel: View {
+    let activeWatch: ActiveWatchPayload
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let live = liveMetrics(now: context.date)
+            LiquidGlassSurface(tint: .orange.opacity(0.20), cornerRadius: 32) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("Running experiment", systemImage: "timer")
+                                .font(.title3.weight(.black))
+                            Text(activeWatch.runId)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        Spacer()
+                        Text(live.remainingText)
+                            .font(.title3.monospacedDigit().weight(.black))
+                            .foregroundStyle(.orange)
+                    }
+
+                    ProgressView(value: live.progress)
+                        .tint(.orange)
+
+                    HStack(spacing: 12) {
+                        WatchMetric("progress", "\(Int((live.progress * 100).rounded()))%", "done")
+                        WatchMetric("cycles", "\(live.cycleEstimate)/\(activeWatch.plannedCycles)", "about")
+                        WatchMetric("finish", activeWatch.estimatedFinishLocal.shortClockText, "local")
+                    }
+
+                    Text("The app refreshes backend state every 30 seconds; this bar counts down locally every second.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(18)
+            }
+        }
+    }
+
+    private func liveMetrics(now: Date) -> (progress: Double, cycleEstimate: Int, remainingText: String) {
+        guard let started = activeWatch.startedDate, let finish = activeWatch.finishDate else {
+            return (Double(activeWatch.progressPercent) / 100.0, activeWatch.completedCyclesEstimate, "\(activeWatch.remainingSeconds / 60)m left")
+        }
+        let total = max(1, finish.timeIntervalSince(started))
+        let elapsed = min(total, max(0, now.timeIntervalSince(started)))
+        let remaining = max(0, Int(finish.timeIntervalSince(now)))
+        let cycle = min(activeWatch.plannedCycles, max(1, Int(elapsed / Double(activeWatch.intervalSeconds)) + 1))
+        return (elapsed / total, cycle, formatDuration(remaining))
+    }
+}
+
+struct WatchMetric: View {
+    let title: String
+    let value: String
+    let unit: String
+
+    init(_ title: String, _ value: String, _ unit: String) {
+        self.title = title
+        self.value = value
+        self.unit = unit
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption.weight(.heavy))
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.headline.monospacedDigit().weight(.black))
+            Text(unit)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -1536,6 +1625,9 @@ struct RenderedReality: Codable {
     let latestStrategyAction: String
     let latestReport: String
     let activeWatch: String
+    let activeWatchProgress: String
+    let activeWatchEta: String
+    let activeWatchRemaining: String
     let completedWatch: String
     let activeManualExposure: String
     let braiinsFreshness: String
@@ -1554,6 +1646,8 @@ struct RenderedReality: Codable {
             RealityRow(label: "engine", value: engineRunning ? "running" : "stopped", unit: "state"),
             RealityRow(label: "strategy", value: latestStrategyAction, unit: "proposal"),
             RealityRow(label: "braiins", value: braiinsFreshness, unit: "freshness"),
+            RealityRow(label: "watch progress", value: activeWatchProgress, unit: "live"),
+            RealityRow(label: "watch ETA", value: activeWatchEta, unit: "local"),
             RealityRow(label: "manual exposure", value: activeManualExposure, unit: "blocker"),
         ] + instrumentRows
     }
@@ -1587,6 +1681,7 @@ struct RenderedReality: Codable {
         let operatorState = appState?.operatorState
         let engineStatus = appState?.engineStatus
         let activePositions = operatorState?.activeManualPositions ?? []
+        let activeWatchDetails = operatorState?.activeWatchDetails
         let completedWatch = operatorState?.completedWatch
         let buttons = visibleButtons(section: section, appState: appState, isWorking: isWorking)
         let truths = operatorTruths(
@@ -1615,6 +1710,9 @@ struct RenderedReality: Codable {
             latestStrategyAction: operatorState?.action ?? "none",
             latestReport: operatorState?.latestReport ?? "none",
             activeWatch: operatorState?.activeWatch ?? "none",
+            activeWatchProgress: activeWatchDetails.map { "\($0.progressPercent)% (\($0.completedCyclesEstimate)/\($0.plannedCycles) cycles)" } ?? "none",
+            activeWatchEta: activeWatchDetails?.estimatedFinishLocal ?? "none",
+            activeWatchRemaining: activeWatchDetails.map { formatDuration($0.remainingSeconds) } ?? "none",
             completedWatch: completedWatch.map { "\($0.reportPath), remaining \($0.remainingMinutes)m, earliest \($0.earliestActionLocal)" } ?? "none",
             activeManualExposure: activePositions.isEmpty ? "none" : activePositions.joined(separator: "; "),
             braiinsFreshness: freshnessText(operatorState),
@@ -1794,6 +1892,9 @@ enum RealitySnapshotWriter {
             "- latest_braiins_sample: \(reality.latestBraiinsSample)",
             "- latest_report: \(reality.latestReport)",
             "- active_watch: \(reality.activeWatch)",
+            "- active_watch_progress: \(reality.activeWatchProgress)",
+            "- active_watch_eta: \(reality.activeWatchEta)",
+            "- active_watch_remaining: \(reality.activeWatchRemaining)",
             "- completed_watch: \(reality.completedWatch)",
             "- active_manual_exposure: \(reality.activeManualExposure)",
             "",
@@ -1871,6 +1972,7 @@ struct OperatorStatePayload: Codable {
     let latestOceanTimestamp: String?
     let latestMarketTimestamp: String?
     let activeManualPositions: [String]
+    let activeWatchDetails: ActiveWatchPayload?
 
     enum CodingKeys: String, CodingKey {
         case hasOcean = "has_ocean"
@@ -1885,7 +1987,47 @@ struct OperatorStatePayload: Codable {
         case latestOceanTimestamp = "latest_ocean_timestamp"
         case latestMarketTimestamp = "latest_market_timestamp"
         case activeManualPositions = "active_manual_positions"
+        case activeWatchDetails = "active_watch_details"
     }
+}
+
+struct ActiveWatchPayload: Codable {
+    let label: String
+    let runId: String
+    let pid: Int?
+    let startedUtc: String
+    let plannedCycles: Int
+    let intervalSeconds: Int
+    let totalSeconds: Int
+    let elapsedSeconds: Int
+    let remainingSeconds: Int
+    let progressPercent: Int
+    let completedCyclesEstimate: Int
+    let nextCycleEtaUtc: String?
+    let nextCycleEtaLocal: String?
+    let estimatedFinishUtc: String
+    let estimatedFinishLocal: String
+
+    enum CodingKeys: String, CodingKey {
+        case label
+        case runId = "run_id"
+        case pid
+        case startedUtc = "started_utc"
+        case plannedCycles = "planned_cycles"
+        case intervalSeconds = "interval_seconds"
+        case totalSeconds = "total_seconds"
+        case elapsedSeconds = "elapsed_seconds"
+        case remainingSeconds = "remaining_seconds"
+        case progressPercent = "progress_percent"
+        case completedCyclesEstimate = "completed_cycles_estimate"
+        case nextCycleEtaUtc = "next_cycle_eta_utc"
+        case nextCycleEtaLocal = "next_cycle_eta_local"
+        case estimatedFinishUtc = "estimated_finish_utc"
+        case estimatedFinishLocal = "estimated_finish_local"
+    }
+
+    var startedDate: Date? { parseISODate(startedUtc) }
+    var finishDate: Date? { parseISODate(estimatedFinishUtc) }
 }
 
 struct CompletedWatchPayload: Codable {
@@ -1992,12 +2134,43 @@ extension String {
     var lastPathComponent: String {
         URL(fileURLWithPath: self).lastPathComponent
     }
+
+    var shortClockText: String {
+        guard let date = parseISODate(self) else { return self }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
 }
 
 func sats(_ btcText: String) -> String {
     guard let btc = Double(btcText) else { return "n/a" }
     let sats = Int((btc * 100_000_000).rounded())
     return "\(sats) sats"
+}
+
+func parseISODate(_ text: String) -> Date? {
+    if let date = ISO8601DateFormatter().date(from: text) {
+        return date
+    }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
+    return formatter.date(from: text)
+}
+
+func formatDuration(_ seconds: Int) -> String {
+    let safe = max(0, seconds)
+    let hours = safe / 3600
+    let minutes = (safe % 3600) / 60
+    let secs = safe % 60
+    if hours > 0 {
+        return "\(hours)h \(minutes)m left"
+    }
+    if minutes > 0 {
+        return "\(minutes)m \(secs)s left"
+    }
+    return "\(secs)s left"
 }
 
 func phText(_ ehText: String) -> String {

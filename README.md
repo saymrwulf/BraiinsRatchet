@@ -59,6 +59,8 @@ Print the latest mirror snapshot:
 ./scripts/ratchet mirror
 ```
 
+When an experiment watch is running, Flight Deck now shows live progress: run id, countdown, approximate cycle count, progress bar, and local finish time. The countdown updates every second; backend state refreshes roughly every 30 seconds.
+
 Advanced fallback for a 6-hour CLI monitoring session:
 
 ```bash

@@ -143,7 +143,7 @@ What you do: do nothing. Leave the app open or closed. The background engine kee
 
 `WAIT` means a watch is already running.
 
-What you do: do not start anything else.
+What you do: do not start anything else. The Flight Deck should show a running-experiment progress panel with progress percent, approximate cycle count, and local finish time.
 
 `COOLDOWN` means the last watch already produced evidence and the system is intentionally waiting.
 
@@ -188,6 +188,8 @@ It collects repeated samples:
 5. A ledger entry in `reports/EXPERIMENT_LOG.md`.
 
 The default watch stage used by the forever engine is 2 hours. It samples every 5 minutes, so a full stage normally has 24 cycles.
+
+During a watch, the app shows the active run id, countdown, progress bar, approximate cycle count, and local finish time. The visual countdown updates every second. Backend state refreshes about every 30 seconds.
 
 ## What The Forever Engine Does
 

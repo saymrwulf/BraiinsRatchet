@@ -24,6 +24,25 @@ class CompletedWatch:
 
 
 @dataclass(frozen=True)
+class ActiveWatchDetails:
+    label: str
+    run_id: str
+    pid: int | None
+    started_utc: str
+    planned_cycles: int
+    interval_seconds: int
+    total_seconds: int
+    elapsed_seconds: int
+    remaining_seconds: int
+    progress_percent: int
+    completed_cycles_estimate: int
+    next_cycle_eta_utc: str | None
+    next_cycle_eta_local: str | None
+    estimated_finish_utc: str
+    estimated_finish_local: str
+
+
+@dataclass(frozen=True)
 class OperatorState:
     has_ocean: bool
     has_market: bool
@@ -37,6 +56,7 @@ class OperatorState:
     latest_ocean_timestamp: str | None
     latest_market_timestamp: str | None
     active_manual_positions: list[str]
+    active_watch_details: ActiveWatchDetails | None = None
 
 
 def get_operator_state(conn) -> OperatorState:
@@ -45,11 +65,13 @@ def get_operator_state(conn) -> OperatorState:
     proposal = latest_proposal(conn)
     latest_report = _latest_report()
     freshness = _freshness_minutes(market.timestamp_utc if market else None)
+    active_watch_details = _active_watch_details()
+    active_watch = active_watch_details.label if active_watch_details else _active_watch_from_process_table()
     return OperatorState(
         has_ocean=ocean is not None,
         has_market=market is not None,
         action=proposal.action if proposal else None,
-        active_watch=_active_watch(),
+        active_watch=active_watch,
         completed_watch=_recent_completed_watch(latest_report, market.timestamp_utc if market else None),
         is_fresh=freshness is not None and freshness <= 30,
         freshness_minutes=freshness,
@@ -58,6 +80,7 @@ def get_operator_state(conn) -> OperatorState:
         latest_ocean_timestamp=ocean.timestamp_utc if ocean else None,
         latest_market_timestamp=market.timestamp_utc if market else None,
         active_manual_positions=_active_manual_positions(conn),
+        active_watch_details=active_watch_details,
     )
 
 
@@ -79,6 +102,9 @@ def build_operator_cockpit(conn) -> str:
         f"  Active manual exposure: {_manual_exposure_text(state.active_manual_positions)}",
         f"  Research stage: {_research_stage(state.active_watch, state.completed_watch)}",
     ]
+
+    if state.active_watch_details:
+        lines.extend(_active_watch_status_lines(state.active_watch_details))
 
     if state.completed_watch:
         lines.extend(_cooldown_status_lines(state.completed_watch))
@@ -406,6 +432,17 @@ def _progress_bar(elapsed: int, total: int, width: int = 20) -> str:
     return "[" + ("#" * filled) + ("-" * (width - filled)) + "]"
 
 
+def _active_watch_status_lines(active_watch: ActiveWatchDetails) -> list[str]:
+    remaining_minutes = max(0, active_watch.remaining_seconds // 60)
+    return [
+        f"  Active watch progress: {_progress_bar(active_watch.elapsed_seconds, active_watch.total_seconds)} {active_watch.progress_percent}%",
+        f"  Active watch cycles: about {active_watch.completed_cycles_estimate}/{active_watch.planned_cycles}",
+        f"  Active watch started: {active_watch.started_utc}",
+        f"  Active watch ETA: {active_watch.estimated_finish_local}",
+        f"  Active watch remaining: about {remaining_minutes} minutes",
+    ]
+
+
 def _running_runs() -> list[str]:
     if not EXPERIMENT_LOG.exists():
         return []
@@ -423,24 +460,71 @@ def _running_runs() -> list[str]:
 
 
 def _active_watch() -> str | None:
-    from_state_file = _active_watch_from_state_file()
-    if from_state_file:
-        return from_state_file
+    details = _active_watch_details()
+    if details:
+        return details.label
     return _active_watch_from_process_table()
 
 
-def _active_watch_from_state_file() -> str | None:
+def _active_watch_details() -> ActiveWatchDetails | None:
     if not ACTIVE_WATCH.exists():
         return None
     try:
         payload = json.loads(ACTIVE_WATCH.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        return "state file exists but is unreadable"
+        return None
     pid = payload.get("pid")
     run_id = payload.get("run_id", "unknown-run")
     if isinstance(pid, int) and _pid_exists(pid):
-        return f"{run_id} pid={pid}"
+        return _active_watch_details_from_payload(payload, run_id, pid)
+    if not isinstance(pid, int):
+        return _active_watch_details_from_payload(payload, run_id, None)
     return None
+
+
+def _active_watch_details_from_payload(
+    payload: dict[str, object],
+    run_id: str,
+    pid: int | None,
+) -> ActiveWatchDetails | None:
+    started = _parse_utc(str(payload.get("started_utc", "")))
+    if started is None:
+        return None
+    try:
+        planned_cycles = int(payload.get("planned_cycles", 0))
+        interval_seconds = int(payload.get("interval_seconds", 0))
+    except (TypeError, ValueError):
+        return None
+    if planned_cycles <= 0 or interval_seconds <= 0:
+        return None
+
+    total_seconds = planned_cycles * interval_seconds
+    now = datetime.now(UTC)
+    elapsed_seconds = max(0, int((now - started).total_seconds()))
+    remaining_seconds = max(0, total_seconds - elapsed_seconds)
+    progress_percent = min(100, max(0, int((elapsed_seconds / total_seconds) * 100)))
+    completed_cycles_estimate = min(planned_cycles, max(1, (elapsed_seconds // interval_seconds) + 1))
+    next_cycle_index = completed_cycles_estimate if completed_cycles_estimate < planned_cycles else None
+    next_cycle_eta = None if next_cycle_index is None else started.timestamp() + (next_cycle_index * interval_seconds)
+    finish = datetime.fromtimestamp(started.timestamp() + total_seconds, UTC)
+    next_cycle_utc = datetime.fromtimestamp(next_cycle_eta, UTC) if next_cycle_eta else None
+    return ActiveWatchDetails(
+        label=f"{run_id} pid={pid}" if pid is not None else run_id,
+        run_id=run_id,
+        pid=pid,
+        started_utc=started.isoformat(timespec="seconds"),
+        planned_cycles=planned_cycles,
+        interval_seconds=interval_seconds,
+        total_seconds=total_seconds,
+        elapsed_seconds=min(elapsed_seconds, total_seconds),
+        remaining_seconds=remaining_seconds,
+        progress_percent=progress_percent,
+        completed_cycles_estimate=completed_cycles_estimate,
+        next_cycle_eta_utc=next_cycle_utc.isoformat(timespec="seconds") if next_cycle_utc else None,
+        next_cycle_eta_local=next_cycle_utc.astimezone().isoformat(timespec="seconds") if next_cycle_utc else None,
+        estimated_finish_utc=finish.isoformat(timespec="seconds"),
+        estimated_finish_local=finish.astimezone().isoformat(timespec="seconds"),
+    )
 
 
 def _active_watch_from_process_table() -> str | None:

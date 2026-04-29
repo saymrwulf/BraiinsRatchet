@@ -5,8 +5,10 @@ import unittest
 from unittest.mock import patch
 
 from braiins_ratchet.guidance import (
+    ActiveWatchDetails,
     CompletedWatch,
     _cooldown_status_lines,
+    _active_watch_status_lines,
     _do_this_now,
     _pathway_forecast,
     build_operator_cockpit,
@@ -149,6 +151,32 @@ class GuidanceTests(unittest.TestCase):
         self.assertIn("Earliest next action: 2026-04-28T00:00:00+02:00", text)
         self.assertIn("Cooldown remaining: 270 minutes", text)
 
+    def test_active_watch_status_includes_progress_and_eta(self) -> None:
+        active_watch = ActiveWatchDetails(
+            label="run-example pid=123",
+            run_id="run-example",
+            pid=123,
+            started_utc="2026-04-29T08:48:06+00:00",
+            planned_cycles=24,
+            interval_seconds=300,
+            total_seconds=7200,
+            elapsed_seconds=1800,
+            remaining_seconds=5400,
+            progress_percent=25,
+            completed_cycles_estimate=7,
+            next_cycle_eta_utc="2026-04-29T09:18:06+00:00",
+            next_cycle_eta_local="2026-04-29T11:18:06+02:00",
+            estimated_finish_utc="2026-04-29T10:48:06+00:00",
+            estimated_finish_local="2026-04-29T12:48:06+02:00",
+        )
+
+        text = "\n".join(_active_watch_status_lines(active_watch))
+
+        self.assertIn("Active watch progress: [#####---------------] 25%", text)
+        self.assertIn("Active watch cycles: about 7/24", text)
+        self.assertIn("Active watch ETA: 2026-04-29T12:48:06+02:00", text)
+        self.assertIn("Active watch remaining: about 90 minutes", text)
+
 
 def _completed_watch(age_minutes: int) -> CompletedWatch:
     return CompletedWatch(
@@ -165,6 +193,7 @@ def _isolated_operator_files():
     return patch.multiple(
         "braiins_ratchet.guidance",
         _active_watch=lambda: None,
+        _active_watch_details=lambda: None,
         _latest_report=lambda: None,
         _running_runs=lambda: [],
     )
