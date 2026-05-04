@@ -1,6 +1,8 @@
 from decimal import Decimal
 from datetime import UTC, datetime
+from pathlib import Path
 import sqlite3
+from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +13,7 @@ from braiins_ratchet.guidance import (
     _active_watch_status_lines,
     _do_this_now,
     _pathway_forecast,
+    _recent_completed_watch,
     build_operator_cockpit,
 )
 from braiins_ratchet.models import CandidateOrder, MarketSnapshot, OceanSnapshot, StrategyProposal
@@ -194,6 +197,23 @@ class GuidanceTests(unittest.TestCase):
         self.assertIn("Active watch cycles: about 7/24", text)
         self.assertIn("Active watch ETA: 2026-04-29T12:48:06+02:00", text)
         self.assertIn("Active watch remaining: about 90 minutes", text)
+
+    def test_zero_sample_failed_report_is_not_treated_as_cooldown_evidence(self) -> None:
+        with TemporaryDirectory() as tmp:
+            reports = Path(tmp) / "reports"
+            reports.mkdir()
+            report = reports / "run-failed.md"
+            report.write_text(
+                "# run-failed\n\n"
+                "## Run Summary\n\n"
+                "- collected_samples: 0\n",
+                encoding="utf-8",
+            )
+
+            with patch("braiins_ratchet.guidance.REPORTS_DIR", reports):
+                completed = _recent_completed_watch("reports/run-failed.md", None)
+
+        self.assertIsNone(completed)
 
 
 def _completed_watch(age_minutes: int) -> CompletedWatch:

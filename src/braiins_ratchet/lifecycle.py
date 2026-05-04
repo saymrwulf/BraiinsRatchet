@@ -10,12 +10,13 @@ from .config import AppConfig
 from .experiments import ACTIVE_WATCH, finish_experiment, start_experiment
 from .guidance import POST_WATCH_COOLDOWN_MINUTES, build_operator_cockpit, get_operator_state
 from .storage import connect, init_db
-from .watch_loop import run_watch_loop
+from .watch_loop import WatchLoopSummary, run_watch_loop
 
 
 DEFAULT_WATCH_CYCLES = 24
 DEFAULT_INTERVAL_SECONDS = 300
 MAX_CONSECUTIVE_CYCLE_FAILURES = 3
+ERROR_BACKOFF_MINUTES = 30
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,15 @@ class ManualPosition:
     description: str
     expected_maturity_utc: str | None
     payload_json: str
+
+
+@dataclass(frozen=True)
+class WatchStageResult:
+    run_id: str
+    status: str
+    successful_cycles: int
+    failed_cycles: int
+    last_error: str | None
 
 
 def init_lifecycle_db(conn) -> None:
@@ -161,31 +171,47 @@ def run_supervisor(config: AppConfig, *, once: bool = False) -> int:
             phase = state.get("phase", "idle")
             next_action_utc = state.get("next_action_utc")
 
-        if phase == "cooldown" and next_action_utc:
+        if phase in {"cooldown", "error_backoff"} and next_action_utc:
             remaining = _seconds_until(next_action_utc)
             if remaining > 0:
-                _print_timer("Lifecycle cooldown", remaining)
+                _print_timer("Lifecycle cooldown" if phase == "cooldown" else "Instrumentation retry backoff", remaining)
                 if once:
                     return 0
                 _sleep_with_progress(remaining)
 
-        run_id = _run_watch_stage(config)
-        next_action = datetime.now(UTC) + timedelta(minutes=POST_WATCH_COOLDOWN_MINUTES)
+        watch = _run_watch_stage(config)
+        if watch.status == "failed" and watch.successful_cycles == 0:
+            next_action = datetime.now(UTC) + timedelta(minutes=ERROR_BACKOFF_MINUTES)
+            phase = "error_backoff"
+            message = "watch failed before collecting samples; retry backoff active"
+            event_type = "watch_failed_backoff"
+        else:
+            next_action = datetime.now(UTC) + timedelta(minutes=POST_WATCH_COOLDOWN_MINUTES)
+            phase = "cooldown"
+            message = "watch complete; cooldown active before next research stage"
+            event_type = "watch_completed"
         with connect() as conn:
             init_lifecycle_db(conn)
             _write_state(
                 conn,
                 {
-                    "phase": "cooldown",
+                    "phase": phase,
                     "next_action_utc": next_action.isoformat(timespec="seconds"),
-                    "last_run_id": run_id,
-                    "message": "watch complete; cooldown active before next research stage",
+                    "last_run_id": watch.run_id,
+                    "message": message,
                 },
             )
             _record_event(
                 conn,
-                "watch_completed",
-                {"run_id": run_id, "next_action_utc": next_action.isoformat(timespec="seconds")},
+                event_type,
+                {
+                    "run_id": watch.run_id,
+                    "status": watch.status,
+                    "successful_cycles": watch.successful_cycles,
+                    "failed_cycles": watch.failed_cycles,
+                    "last_error": watch.last_error,
+                    "next_action_utc": next_action.isoformat(timespec="seconds"),
+                },
             )
             print(
                 build_operator_cockpit(
@@ -244,7 +270,7 @@ def recover_stale_active_watch(conn) -> str | None:
     return report_path
 
 
-def _run_watch_stage(config: AppConfig) -> str:
+def _run_watch_stage(config: AppConfig) -> WatchStageResult:
     experiment = start_experiment(
         DEFAULT_WATCH_CYCLES,
         DEFAULT_INTERVAL_SECONDS,
@@ -309,7 +335,13 @@ def _run_watch_stage(config: AppConfig) -> str:
                 "last_error": summary.last_error,
             },
         )
-    return experiment.run_id
+    return WatchStageResult(
+        run_id=experiment.run_id,
+        status=summary.status,
+        successful_cycles=summary.successful_cycles,
+        failed_cycles=summary.failed_cycles,
+        last_error=summary.last_error,
+    )
 
 
 def _print_cycle_result(index: int, total: int, result) -> None:

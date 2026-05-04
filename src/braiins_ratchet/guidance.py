@@ -413,6 +413,8 @@ def _recent_completed_watch(latest_report: str | None, latest_market_timestamp: 
     report_path = REPORTS_DIR.parent / latest_report
     if not report_path.name.startswith("run-") or not report_path.exists():
         return None
+    if _report_collected_samples(report_path) == 0:
+        return None
     market_dt = _parse_utc(latest_market_timestamp)
     if market_dt is not None and report_path.stat().st_mtime < market_dt.timestamp():
         return None
@@ -434,6 +436,23 @@ def _recent_completed_watch(latest_report: str | None, latest_market_timestamp: 
         earliest_action_utc=earliest_action_utc.isoformat(timespec="seconds"),
         earliest_action_local=earliest_action_local.isoformat(timespec="seconds"),
     )
+
+
+def _report_collected_samples(report_path: Path) -> int | None:
+    try:
+        lines = report_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith("- collected_samples:"):
+            continue
+        _, _, value = stripped.partition(":")
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return None
 
 
 def _research_stage(active_watch: str | None, completed_watch: CompletedWatch | None) -> str:
